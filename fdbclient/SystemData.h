@@ -281,5 +281,8 @@ extern const KeyRef healthyZoneKey;
 
 const Value healthyZoneValue( StringRef const& zoneId, Version version );
 std::pair<Key,Version> decodeHealthyZoneValue( ValueRef const& );
+extern const StringRef execSnap;
+extern const StringRef execDisableTLogPop;
+extern const StringRef execEnableTLogPop;
 
 #endif
