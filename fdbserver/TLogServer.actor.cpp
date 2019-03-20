@@ -349,7 +349,7 @@ struct TLogData : NonCopyable {
 	    bytesInput(0), bytesDurable(0), overheadBytesInput(0), overheadBytesDurable(0),
 	    peekMemoryLimiter(SERVER_KNOBS->TLOG_SPILL_REFERENCE_MAX_PEEK_MEMORY_BYTES),
 	    concurrentLogRouterReads(SERVER_KNOBS->CONCURRENT_LOG_ROUTER_READS), ignorePopRequest(false),
-	    ignorePopDeadline(), ignorePopUid(), dataFolder(folder), toBePopped() {}
+	    ignorePopDeadline(), ignorePopUid(), dataFolder(folder), toBePopped(), degraded(degraded) {}
 };
 
 struct LogData : NonCopyable, public ReferenceCounted<LogData> {

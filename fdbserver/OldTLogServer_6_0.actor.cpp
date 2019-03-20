@@ -297,7 +297,7 @@ struct TLogData : NonCopyable {
 	    queueCommitBegin(0), queueCommitEnd(0), diskQueueCommitBytes(0), largeDiskQueueCommitBytes(false),
 	    bytesInput(0), bytesDurable(0), overheadBytesInput(0), overheadBytesDurable(0),
 	    concurrentLogRouterReads(SERVER_KNOBS->CONCURRENT_LOG_ROUTER_READS), ignorePopRequest(false),
-	    ignorePopDeadline(), ignorePopUid(), dataFolder(folder), toBePopped() {}
+	    ignorePopDeadline(), ignorePopUid(), dataFolder(folder), toBePopped(), degraded(degraded) {}
 };
 
 struct LogData : NonCopyable, public ReferenceCounted<LogData> {
