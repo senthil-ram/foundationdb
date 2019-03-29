@@ -3337,6 +3337,7 @@ ACTOR Future<Void> snapCreate(Database inputCx, StringRef snapCmd, UID snapUID) 
 			wait(tr.commit());
 			break;
 		} catch (Error& e) {
+			TraceEvent("DisableTLogPopFailed").detail("Error", e.what());
 			wait(tr.onError(e));
 		}
 	}
@@ -3388,6 +3389,7 @@ ACTOR Future<Void> snapCreate(Database inputCx, StringRef snapCmd, UID snapUID) 
 			wait(tr.commit());
 			break;
 		} catch (Error& e) {
+			TraceEvent("EnableTLogPopFailed").detail("Error", e.what());
 			wait(tr.onError(e));
 		}
 	}
