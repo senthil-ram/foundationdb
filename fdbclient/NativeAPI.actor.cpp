@@ -3351,7 +3351,6 @@ ACTOR Future<Void> snapCreate(Database inputCx, StringRef snapCmd, UID snapUID) 
 	int p = snapCmd.toString().find_first_of(':', 0);
 	state std::string snapPayLoad;
 
-	TraceEvent("SnapCmd").detail("Command", snapCmd.toString());
 	if (p == snapCmd.toString().npos) {
 		snapPayLoad = snapCmd.toString() + ":uid=" + snapUID.toString();
 	} else {
@@ -3379,10 +3378,7 @@ ACTOR Future<Void> snapCreate(Database inputCx, StringRef snapCmd, UID snapUID) 
 
 	if (BUGGIFY) {
 		int32_t toDelay = g_random->randomInt(1, 30);
-		TraceEvent("SleepingBeforeEnablingPop")
-			.detail("Duration", toDelay);
 		wait(delay(toDelay));
-		TraceEvent("DoneSleepingBeforeEnablingPop");
 	}
 
 	// enable popping of the TLog
