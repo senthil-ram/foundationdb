@@ -228,6 +228,7 @@ std::string filenameFromId( KeyValueStoreType storeType, std::string folder, std
 	UNREACHABLE();
 }
 
+
 struct TLogOptions {
 	TLogOptions() = default;
 	TLogOptions( TLogVersion v, TLogSpillType s ) : version(v), spillType(s) {}
@@ -1004,7 +1005,7 @@ ACTOR Future<Void> workerServer(Reference<ClusterConnectionFile> connFile,
 
 				//printf("Recruited as masterProxyServer\n");
 				errorForwarders.add( zombie(recruited, forwardError( errors, Role::MASTER_PROXY, recruited.id(),
-						masterProxyServer( recruited, req, dbInfo ) ) ) );
+						masterProxyServer( recruited, req, dbInfo, whiteListBinPaths ) ) ) );
 				req.reply.send(recruited);
 			}
 			when( InitializeResolverRequest req = waitNext(interf.resolver.getFuture()) ) {
@@ -1343,12 +1344,16 @@ ACTOR Future<Void> fdbd(
 	std::string coordFolder,
 	int64_t memoryLimit,
 	std::string metricsConnFile,
-	std::string metricsPrefix )
+	std::string metricsPrefix,
+	std::string whiteListBinPaths)
 {
 	try {
 
 		ServerCoordinators coordinators( connFile );
-		TraceEvent("StartingFDBD").detail("ZoneID", localities.zoneId()).detail("MachineId", localities.machineId()).detail("DiskPath", dataFolder).detail("CoordPath", coordFolder);
+		if (g_network->isSimulated()) {
+			whiteListBinPaths = "random_path,  /bin/snap_create.sh";
+		}
+		TraceEvent("StartingFDBD").detail("ZoneID", localities.zoneId()).detail("MachineId", localities.machineId()).detail("DiskPath", dataFolder).detail("CoordPath", coordFolder).detail("WhiteListBinPath", whiteListBinPaths);
 
 		// SOMEDAY: start the services on the machine in a staggered fashion in simulation?
 		state vector<Future<Void>> v;
@@ -1372,7 +1377,7 @@ ACTOR Future<Void> fdbd(
 		v.push_back( reportErrors(failureMonitorClient( ci, true ), "FailureMonitorClient") );
 		v.push_back(reportErrorsExcept(workerServer(connFile, cc, localities, asyncPriorityInfo, processClass,
 		                                            dataFolder, memoryLimit, metricsConnFile, metricsPrefix,
-		                                            recoveredDiskFiles, coordFolder),
+		                                            recoveredDiskFiles, coordFolder, whiteListBinPaths),
 		                               "WorkerServer", UID(), &normalWorkerErrors()));
 		state Future<Void> firstConnect = reportErrors( printOnFirstConnected(ci), "ClusterFirstConnectedError" );
 

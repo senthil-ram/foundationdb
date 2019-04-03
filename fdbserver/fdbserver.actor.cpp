@@ -81,7 +81,7 @@
 
 enum {
 	OPT_CONNFILE, OPT_SEEDCONNFILE, OPT_SEEDCONNSTRING, OPT_ROLE, OPT_LISTEN, OPT_PUBLICADDR, OPT_DATAFOLDER, OPT_LOGFOLDER, OPT_PARENTPID, OPT_NEWCONSOLE, OPT_NOBOX, OPT_TESTFILE, OPT_RESTARTING, OPT_RESTORING, OPT_RANDOMSEED, OPT_KEY, OPT_MEMLIMIT, OPT_STORAGEMEMLIMIT, OPT_MACHINEID, OPT_DCID, OPT_MACHINE_CLASS, OPT_BUGGIFY, OPT_VERSION, OPT_CRASHONERROR, OPT_HELP, OPT_NETWORKIMPL, OPT_NOBUFSTDOUT, OPT_BUFSTDOUTERR, OPT_TRACECLOCK, OPT_NUMTESTERS, OPT_DEVHELP, OPT_ROLLSIZE, OPT_MAXLOGS, OPT_MAXLOGSSIZE, OPT_KNOB, OPT_TESTSERVERS, OPT_TEST_ON_SERVERS, OPT_METRICSCONNFILE, OPT_METRICSPREFIX,
-	OPT_LOGGROUP, OPT_LOCALITY, OPT_IO_TRUST_SECONDS, OPT_IO_TRUST_WARN_ONLY, OPT_FILESYSTEM, OPT_KVFILE, OPT_TRACE_FORMAT };
+	OPT_LOGGROUP, OPT_LOCALITY, OPT_IO_TRUST_SECONDS, OPT_IO_TRUST_WARN_ONLY, OPT_FILESYSTEM, OPT_KVFILE, OPT_TRACE_FORMAT, OPT_WHITELIST_BINPATH };
 
 CSimpleOpt::SOption g_rgOptions[] = {
 	{ OPT_CONNFILE,             "-C",                          SO_REQ_SEP },
@@ -156,6 +156,7 @@ CSimpleOpt::SOption g_rgOptions[] = {
 	{ OPT_IO_TRUST_SECONDS,     "--io_trust_seconds",          SO_REQ_SEP },
 	{ OPT_IO_TRUST_WARN_ONLY,   "--io_trust_warn_only",        SO_NONE },
 	{ OPT_TRACE_FORMAT      ,   "--trace_format",              SO_REQ_SEP },
+	{ OPT_WHITELIST_BINPATH,    "--whitelist_binpath",         SO_REQ_SEP },
 
 #ifndef TLS_DISABLED
 	TLS_OPTION_FLAGS
@@ -893,6 +894,7 @@ int main(int argc, char* argv[]) {
 		const char *testFile = "tests/default.txt";
 		std::string kvFile;
 		std::string testServersStr;
+		std::string whiteListBinPaths;
 		std::vector<std::string> publicAddressStrs, listenAddressStrs;
 		const char *targetKey = NULL;
 		uint64_t memLimit = 8LL << 30; // Nice to maintain the same default value for memLimit and SERVER_KNOBS->SERVER_MEM_LIMIT and SERVER_KNOBS->COMMIT_BATCHES_MEM_BYTES_HARD_LIMIT
@@ -1243,6 +1245,9 @@ int main(int argc, char* argv[]) {
 					if (!selectTraceFormatter(args.OptionArg())) {
 						fprintf(stderr, "WARNING: Unrecognized trace format `%s'\n", args.OptionArg());
 					}
+					break;
+				case OPT_WHITELIST_BINPATH:
+					whiteListBinPaths = args.OptionArg();
 					break;
 #ifndef TLS_DISABLED
 				case TLSOptions::OPT_TLS_PLUGIN:
@@ -1676,7 +1681,7 @@ int main(int argc, char* argv[]) {
 					}
 				}
 			}
-			setupAndRun( dataFolder, testFile, restarting, (isRestoring >= 1) , tlsOptions );
+			setupAndRun( dataFolder, testFile, restarting, (isRestoring >= 1), whiteListBinPaths, tlsOptions);
 			g_simulator.run();
 		} else if (role == FDBD) {
 			ASSERT( connectionFile );
@@ -1687,7 +1692,7 @@ int main(int argc, char* argv[]) {
 				dataFolder = format("fdb/%d/", publicAddresses.address.port);  // SOMEDAY: Better default
 
 			vector<Future<Void>> actors(listenErrors.begin(), listenErrors.end());
-			actors.push_back( fdbd(connectionFile, localities, processClass, dataFolder, dataFolder, storageMemLimit, metricsConnFile, metricsPrefix) );
+			actors.push_back( fdbd(connectionFile, localities, processClass, dataFolder, dataFolder, storageMemLimit, metricsConnFile, metricsPrefix, whiteListBinPaths) );
 			//actors.push_back( recurring( []{}, .001 ) );  // for ASIO latency measurement
 
 			f = stopAfter( waitForAll(actors) );
