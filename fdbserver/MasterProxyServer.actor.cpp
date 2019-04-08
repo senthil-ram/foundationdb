@@ -872,7 +872,6 @@ ACTOR Future<Void> commitBatch(
 						if (m.param1 == execSnap) {
 							te1.trackLatest(tokenStr.c_str());
 						}
-						int i = 0;
 						std::string allTagString;
 						for (auto& tag : allSources) {
 							allTagString += tag.toString() + ",";
