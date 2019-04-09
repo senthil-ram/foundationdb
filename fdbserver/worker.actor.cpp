@@ -65,6 +65,28 @@ extern IKeyValueStore* keyValueStoreCompressTestData(IKeyValueStore* store);
 # define KV_STORE(filename,uid) keyValueStoreMemory(filename,uid)
 #endif
 
+
+std::map<NetworkAddress, std::set<UID>> execOpsInProgress;
+
+bool isExecOpInProgress(UID execUID) {
+	NetworkAddress addr = g_network->getLocalAddress();
+	return (execOpsInProgress[addr].find(execUID) != execOpsInProgress[addr].end());
+}
+
+void setExecOpInProgress(UID execUID) {
+	NetworkAddress addr = g_network->getLocalAddress();
+	ASSERT(execOpsInProgress[addr].find(execUID) == execOpsInProgress[addr].end());
+	execOpsInProgress[addr].insert(execUID);
+	return;
+}
+
+void clearExecOpInProgress(UID execUID) {
+	NetworkAddress addr = g_network->getLocalAddress();
+	ASSERT(execOpsInProgress[addr].find(execUID) != execOpsInProgress[addr].end());
+	execOpsInProgress[addr].erase(execUID);
+	return;
+}
+
 ACTOR static Future<Void> extractClientInfo( Reference<AsyncVar<ServerDBInfo>> db, Reference<AsyncVar<ClientDBInfo>> info ) {
 	loop {
 		info->set( db->get().client );
@@ -1119,7 +1141,6 @@ ACTOR Future<Void> workerServer(Reference<ClusterConnectionFile> connFile,
 				loggingTrigger = delay( loggingDelay, TaskFlushTrace );
 			}
 			when(state ExecuteRequest req = waitNext(interf.execReq.getFuture())) {
-				int len = req.execPayLoad.size();
 				state ExecCmdValueString execArg(req.execPayLoad.toString());
 				execArg.dbgPrint();
 				state std::string uidStr = execArg.getBinaryArgValue("uid");
@@ -1156,7 +1177,7 @@ ACTOR Future<Void> workerServer(Reference<ClusterConnectionFile> connFile,
 					std::string mkdirBin = "/bin/mkdir";
 					paramList.push_back(mkdirBin);
 					paramList.push_back(folderTo);
-					cmdErr = spawnProcess(mkdirBin, paramList, 3.0, true);
+					cmdErr = spawnProcess(mkdirBin, paramList, 3.0);
 					wait(success(cmdErr));
 					err = cmdErr.get();
 					if (err == 0) {
@@ -1172,7 +1193,6 @@ ACTOR Future<Void> workerServer(Reference<ClusterConnectionFile> connFile,
 						err = cmdErr.get();
 					}
 				}
-
 				auto tokenStr = "ExecTrace/Coordinators/" + uidStr;
 				auto te = TraceEvent("ExecTraceCoordinators");
 				te.detail("Uid", uidStr);
