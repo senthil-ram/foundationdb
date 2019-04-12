@@ -894,7 +894,7 @@ int main(int argc, char* argv[]) {
 		const char *testFile = "tests/default.txt";
 		std::string kvFile;
 		std::string testServersStr;
-		std::string whiteListBinPaths;
+		std::string whitelistBinPaths;
 		std::vector<std::string> publicAddressStrs, listenAddressStrs;
 		const char *targetKey = NULL;
 		uint64_t memLimit = 8LL << 30; // Nice to maintain the same default value for memLimit and SERVER_KNOBS->SERVER_MEM_LIMIT and SERVER_KNOBS->COMMIT_BATCHES_MEM_BYTES_HARD_LIMIT
@@ -1247,7 +1247,7 @@ int main(int argc, char* argv[]) {
 					}
 					break;
 				case OPT_WHITELIST_BINPATH:
-					whiteListBinPaths = args.OptionArg();
+					whitelistBinPaths = args.OptionArg();
 					break;
 #ifndef TLS_DISABLED
 				case TLSOptions::OPT_TLS_PLUGIN:
@@ -1681,7 +1681,7 @@ int main(int argc, char* argv[]) {
 					}
 				}
 			}
-			setupAndRun( dataFolder, testFile, restarting, (isRestoring >= 1), whiteListBinPaths, tlsOptions);
+			setupAndRun( dataFolder, testFile, restarting, (isRestoring >= 1), whitelistBinPaths, tlsOptions);
 			g_simulator.run();
 		} else if (role == FDBD) {
 			ASSERT( connectionFile );
@@ -1692,7 +1692,7 @@ int main(int argc, char* argv[]) {
 				dataFolder = format("fdb/%d/", publicAddresses.address.port);  // SOMEDAY: Better default
 
 			vector<Future<Void>> actors(listenErrors.begin(), listenErrors.end());
-			actors.push_back( fdbd(connectionFile, localities, processClass, dataFolder, dataFolder, storageMemLimit, metricsConnFile, metricsPrefix, whiteListBinPaths) );
+			actors.push_back( fdbd(connectionFile, localities, processClass, dataFolder, dataFolder, storageMemLimit, metricsConnFile, metricsPrefix, whitelistBinPaths) );
 			//actors.push_back( recurring( []{}, .001 ) );  // for ASIO latency measurement
 
 			f = stopAfter( waitForAll(actors) );

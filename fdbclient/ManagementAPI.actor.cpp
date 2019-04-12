@@ -1451,7 +1451,7 @@ ACTOR Future<Void> mgmtSnapCreate(Database cx, StringRef snapCmd) {
 			++retryCount;
 			TraceEvent(retryCount > 3 ? SevWarn : SevInfo, "SnapCreateFailed").error(e);
 			if (retryCount > 3) {
-				printf("Snapshot create failed, %d (%s)\n", e.code(), e.what());
+				fprintf(stderr, "Snapshot create failed, %d (%s)\n", e.code(), e.what());
 				throw;
 			}
 		}
