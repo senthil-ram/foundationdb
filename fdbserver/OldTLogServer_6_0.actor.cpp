@@ -1433,8 +1433,6 @@ ACTOR Future<Void> tLogSnapHelper(TLogData* self,
 		}
 		poppedTagVersion = tagv->popped;
 
-		state std::string message = "ExecTrace/TLog/" + tagv->tag.toString() + "/" + uidStr.toString();
-
 		TraceEvent te = TraceEvent(SevDebug, "TLogExecTraceDetailed");
 		te.detail("Uid", uidStr.toString());
 		te.detail("Status", err);
@@ -1448,9 +1446,6 @@ ACTOR Future<Void> tLogSnapHelper(TLogData* self,
 		te.detail("PersistentDatadurableVersion", logData->persistentDataDurableVersion);
 		te.detail("QueueCommittedVersion", logData->queueCommittedVersion.get());
 		te.detail("IgnorePopUid", self->ignorePopUid);
-		if (execCmd == execSnap) {
-			te.trackLatest(message.c_str());
-		}
 	}
 	return Void();
 }

@@ -14,7 +14,7 @@ testTitle=SnapSimpleTakeSnap
         maxSnapDelay=5.0
         testID=1
         clearAfterTest=false
-        snapCheck=true
+        snapCheck=false
 
 ;write 1000 Keys ending with odd number
 testTitle=SnapSimplePost

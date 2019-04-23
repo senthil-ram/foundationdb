@@ -12,7 +12,7 @@ testTitle=SnapCyclePre
         maxSnapDelay=10.0
         testID=1
         clearAfterTest=false
-        snapCheck=true
+        snapCheck=false
 
 testTitle=SnapCycleShutdown
 ;save and shutdown
