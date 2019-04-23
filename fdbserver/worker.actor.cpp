@@ -667,7 +667,7 @@ ACTOR Future<Void> workerServer(Reference<ClusterConnectionFile> connFile,
 	// here is no, so that when running with log_version==3, all files should say V=3.
 	state std::map<std::tuple<TLogVersion, KeyValueStoreType::StoreType, TLogSpillType>,
 	               std::pair<Future<Void>, PromiseStream<InitializeTLogRequest>>> sharedLogs;
-	state std::string coordFolder = _coordFolder;
+	state std::string coordFolder = abspath(_coordFolder);
 
 	state WorkerInterface interf( locality );
 
