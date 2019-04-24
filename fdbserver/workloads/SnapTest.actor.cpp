@@ -278,6 +278,7 @@ public: // workload functions
 			// corresponding enable, then TLog will automatically enable the
 			// popping of TLogs. this test case validates that we auto
 			// enable the popping of TLogs
+			disableConnectionFailuresAfter(0.0, "TestRun");
 			tr.reset();
 			loop {
 				// disable pop of the TLog
