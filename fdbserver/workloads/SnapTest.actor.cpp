@@ -290,7 +290,7 @@ public: // workload functions
 		} else if (self->testID == 6) {
 			// snapshot create without disabling pop of the TLog
 			tr.reset();
-			state StringRef uidStr = LiteralStringRef("d78b08d47f341158e9a54d4baaf4a4dd");
+			state Standalone<StringRef> uidStr = LiteralStringRef("d78b08d47f341158e9a54d4baaf4a4dd");
 			loop {
 				try {
 					Standalone<StringRef> snapPayload = LiteralStringRef("/bin/"
@@ -310,8 +310,10 @@ public: // workload functions
 			loop {
 				try {
 					Standalone<StringRef> keyStr = LiteralStringRef("SnapFailedTLog.").withSuffix(uidStr);
+					TraceEvent("TestKeyStr").detail("Value", keyStr);
 					Optional<Value> val = wait(tr.get(keyStr));
 					ASSERT(val.present());
+					break;
 				} catch (Error &e) {
 					wait(tr.onError(e));
 				}
@@ -349,9 +351,11 @@ public: // workload functions
 			// read the key SnapFailedTLog.$UID
 			loop {
 				try {
-					StringRef keyStr = LiteralStringRef("SnapFailedTLog").withSuffix(uidStr);
+					Standalone<StringRef> keyStr = LiteralStringRef("SnapFailedTLog.").withSuffix(uidStr);
+					TraceEvent("TestKeyStr").detail("Value", keyStr);
 					Optional<Value> val = wait(tr.get(keyStr));
 					ASSERT(val.present());
+					break;
 				} catch (Error &e) {
 					wait(tr.onError(e));
 				}

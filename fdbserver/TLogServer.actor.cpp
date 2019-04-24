@@ -1685,6 +1685,7 @@ ACTOR Future<Void> execProcessingHelper(TLogData* self,
 					Database cx = openDBOnServer(self->dbInfo);
 					Standalone<StringRef> keyStr = LiteralStringRef("SnapFailedTLog.").withSuffix(uidStr);
 					StringRef valStr = LiteralStringRef("Success");
+					TraceEvent("TLogKeyStr").detail("Value", keyStr);
 					snapFailKeySetters->push_back(runRYWTransaction(cx, [=](Reference<ReadYourWritesTransaction> tr) -> Future<Void>
 																   { tr->set(keyStr, valStr); return Void(); }));
 				}
@@ -1921,10 +1922,11 @@ ACTOR Future<Void> tLogCommit(
 		logData->version.set( req.version );
 
 		if (g_network->isSimulated()) {
-			TraceEvent("B4WAITEDFORCOMPLETION");
-			if (snapFailKeySetters.size() > 0)
-			wait(waitForAll(snapFailKeySetters));
-			TraceEvent("WAITEDFORCOMPLETION");
+			if (snapFailKeySetters.size() > 0) {
+				TraceEvent("B4WAITEDFORCOMPLETION");
+				wait(waitForAll(snapFailKeySetters));
+				TraceEvent("WAITEDFORCOMPLETION");
+			}
 		}
 		if(req.debugID.present())
 			g_traceBatch.addEvent("CommitDebug", tlogDebugID.get().first(), "TLog.tLogCommit.AfterTLogCommit");
