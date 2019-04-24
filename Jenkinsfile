@@ -92,7 +92,7 @@ def makeTestStep(iteration) {
 
 stage("Test") {
     def testSteps = [:]
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 48; i++) {
         testSteps["Iteration ${i}"] = makeTestStep(i)
     }
     println(testSteps)
