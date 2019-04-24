@@ -124,27 +124,24 @@ public: // workload functions
 		case 1:
 		case 2:
 		case 3: {
-			   return true;
+			// snap restore will verify that the snap was a success
+			return true;
 		}
 		case 4: {
-			std::string token = "DisableTLogPopTimedOut";
-			return verifyTLogTrackLatest(cx, this, token);
-			break;
-		}
-		case 5: {
-			std::string token = "TLogPopDisableEnableUidMismatch";
-			return verifyTLogTrackLatest(cx, this, token);
-			break;
+			// QuietDatabase will test this
+			return true;
 		}
 		case 6: {
-			std::string token = "SnapFailIgnorePopNotSet";
-			return verifyTLogTrackLatest(cx, this, token);
-			break;
+			// std::string token = "SnapFailIgnorePopNotSet";
+			// return verifyTLogTrackLatest(cx, this, token);
+			// break;
+			return true;
 		}
 		case 7: {
-			std::string token = "SnapFailedDisableTLogUidMismatch";
-			return verifyTLogTrackLatest(cx, this, token);
-			break;
+			// std::string token = "SnapFailedDisableTLogUidMismatch";
+			// return verifyTLogTrackLatest(cx, this, token);
+			// break;
+			return true;
 		}
 		default: { break; }
 		}
@@ -290,45 +287,14 @@ public: // workload functions
 					wait(tr.onError(e));
 				}
 			}
-			// wait for 40 seconds and verify that the enabled pop happened
-			// automatically
-			wait(delay(40.0));
-			self->snapUID = UID::fromString("a36b2ca0e8dab0452ac3e12b6b926f4b");
-		} else if (self->testID == 5) {
-			// description: disable TLog pop and enable TLog pop with
-			// different UIDs should mis-match and print an error
-			tr.reset();
-			loop {
-				// disable pop of the TLog
-				try {
-					StringRef payLoadRef = LiteralStringRef("empty-binary:uid=956349f5f368d37a802f1f37d7f4b9c1");
-					tr.execute(execDisableTLogPop, payLoadRef);
-					wait(tr.commit());
-					break;
-				} catch (Error& e) {
-					wait(tr.onError(e));
-				}
-			}
-			tr.reset();
-			loop {
-				// enable pop of the TLog
-				try {
-					StringRef payLoadRef = LiteralStringRef("empty-binary:uid=5810898ca2f3143a246886c79d1bea92");
-					tr.execute(execEnableTLogPop, payLoadRef);
-					wait(tr.commit());
-					break;
-				} catch (Error& e) {
-					wait(tr.onError(e));
-				}
-			}
-			self->snapUID = UID::fromString("5810898ca2f3143a246886c79d1bea92");
 		} else if (self->testID == 6) {
 			// snapshot create without disabling pop of the TLog
 			tr.reset();
+			state StringRef uidStr = LiteralStringRef("d78b08d47f341158e9a54d4baaf4a4dd");
 			loop {
 				try {
-					StringRef snapPayload = LiteralStringRef("/bin/"
-					                                         "snap_create.sh:uid=d78b08d47f341158e9a54d4baaf4a4dd");
+					Standalone<StringRef> snapPayload = LiteralStringRef("/bin/"
+					                                         "snap_create.sh:uid=").withSuffix(uidStr);
 					tr.execute(execSnap, snapPayload);
 					wait(tr.commit());
 					break;
@@ -337,7 +303,19 @@ public: // workload functions
 					wait(tr.onError(e));
 				}
 			}
-			self->snapUID = UID::fromString("d78b08d47f341158e9a54d4baaf4a4dd");
+			self->snapUID = UID::fromString(uidStr.toString());
+			wait(delay(30.0));
+			tr.reset();
+			// read the key SnapFailedTLog.$UID
+			loop {
+				try {
+					Standalone<StringRef> keyStr = LiteralStringRef("SnapFailedTLog.").withSuffix(uidStr);
+					Optional<Value> val = wait(tr.get(keyStr));
+					ASSERT(val.present());
+				} catch (Error &e) {
+					wait(tr.onError(e));
+				}
+			}
 		} else if (self->testID == 7) {
 			// disable popping of TLog and snapshot create with mis-matching
 			tr.reset();
@@ -353,10 +331,11 @@ public: // workload functions
 				}
 			}
 			tr.reset();
+			uidStr = LiteralStringRef("ba61e9612a561d60bd83ad83e1b63568");
 			loop {
 				// snap create with different UID
 				try {
-					StringRef snapPayload = LiteralStringRef("/bin/snap_create.sh:uid=ba61e9612a561d60bd83ad83e1b63568");
+					Standalone<StringRef> snapPayload = LiteralStringRef("/bin/snap_create.sh:uid=").withSuffix(uidStr);
 					tr.execute(execSnap, snapPayload);
 					wait(tr.commit());
 					break;
@@ -365,7 +344,18 @@ public: // workload functions
 					wait(tr.onError(e));
 				}
 			}
-			self->snapUID = UID::fromString("ba61e9612a561d60bd83ad83e1b63568");
+			self->snapUID = UID::fromString(uidStr.toString());
+			tr.reset();
+			// read the key SnapFailedTLog.$UID
+			loop {
+				try {
+					StringRef keyStr = LiteralStringRef("SnapFailedTLog").withSuffix(uidStr);
+					Optional<Value> val = wait(tr.get(keyStr));
+					ASSERT(val.present());
+				} catch (Error &e) {
+					wait(tr.onError(e));
+				}
+			}
 		} else if (self->testID == 8) {
 			// create a snapshot with a non whitelisted binary path and operation
 			// should fail

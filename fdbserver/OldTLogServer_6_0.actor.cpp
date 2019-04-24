@@ -25,6 +25,7 @@
 #include "fdbclient/Notified.h"
 #include "fdbclient/KeyRangeMap.h"
 #include "fdbclient/SystemData.h"
+#include "fdbclient/RunTransaction.actor.h"
 #include "fdbserver/WorkerInterface.actor.h"
 #include "fdbserver/TLogInterface.h"
 #include "fdbserver/Knobs.h"
@@ -1261,7 +1262,8 @@ ACTOR Future<Void> execProcessingHelper(TLogData* self,
 										Standalone<VectorRef<Tag>>* execTags,
 										ExecCmdValueString* execArg,
 										StringRef* execCmd,
-										Version* execVersion)
+										Version* execVersion,
+										vector<Future<Void>>* snapFailKeySetters)
 {
 	// inspect the messages to find if there is an Exec type and print
 	// it. message are prefixed by the length of the message and each
@@ -1314,13 +1316,31 @@ ACTOR Future<Void> execProcessingHelper(TLogData* self,
 		}
 		if (*execCmd == execSnap) {
 			// validation check specific to snap request
-			std::string reason;
+			state std::string reason;
 			if (!self->ignorePopRequest) {
 				*execVersion = invalidVersion;
 				reason = "SnapFailIgnorePopNotSet";
+				TraceEvent("BEFORE");
+				if (g_network->isSimulated()) {
+					// write SnapFailedTLog.$UID
+					Database cx = openDBOnServer(self->dbInfo);
+					StringRef keyStr = LiteralStringRef("SnapFailedTLog.").withSuffix(uidStr);
+					StringRef valStr = LiteralStringRef("Success");
+					snapFailKeySetters->push_back(runRYWTransaction(cx, [=](Reference<ReadYourWritesTransaction> tr) -> Future<Void>
+																   { tr->set(keyStr, valStr); return Void(); }));
+				}
+				TraceEvent("AFTER");
 			} else if (uidStr.toString() != self->ignorePopUid) {
 				*execVersion = invalidVersion;
 				reason = "SnapFailedDisableTLogUidMismatch";
+				if (g_network->isSimulated()) {
+					// write SnapFailedTLog.$UID
+					Database cx = openDBOnServer(self->dbInfo);
+					StringRef keyStr = LiteralStringRef("SnapFailedTLog.").withSuffix(uidStr);
+					StringRef valStr = LiteralStringRef("Success");
+					snapFailKeySetters->push_back(runRYWTransaction(cx, [=](Reference<ReadYourWritesTransaction> tr) -> Future<Void>
+																   { tr->set(keyStr, valStr); return Void(); }));
+				}
 			}
 
 			if (*execVersion == invalidVersion) {
@@ -1504,6 +1524,7 @@ ACTOR Future<Void> tLogCommit(
 	state TLogQueueEntryRef qe;
 	state StringRef execCmd;
 	state Standalone<VectorRef<Tag>> execTags;
+	state vector<Future<Void>> snapFailKeySetters;
 
 	if (logData->version.get() == req.prevVersion) {  // Not a duplicate (check relies on no waiting between here and self->version.set() below!)
 		if(req.debugID.present())
@@ -1516,7 +1537,7 @@ ACTOR Future<Void> tLogCommit(
 		qe.id = logData->logId;
 
 		if (req.hasExecOp) {
-			wait(execProcessingHelper(self, logData, &req, &execTags, &execArg, &execCmd, &execVersion));
+			wait(execProcessingHelper(self, logData, &req, &execTags, &execArg, &execCmd, &execVersion, &snapFailKeySetters));
 			if (execVersion != invalidVersion) {
 				TraceEvent(SevDebug, "SettingExecOpCommit")
 					.detail("ExecVersion", execVersion)
@@ -1540,6 +1561,13 @@ ACTOR Future<Void> tLogCommit(
 
 		// Notifies the commitQueue actor to commit persistentQueue, and also unblocks tLogPeekMessages actors
 		logData->version.set( req.version );
+
+		if (g_network->isSimulated()) {
+			TraceEvent("B4WAITEDFORCOMPLETION");
+			if (snapFailKeySetters.size() > 0)
+				wait(waitForAll(snapFailKeySetters));
+			TraceEvent("WAITEDFORCOMPLETION");
+		}
 
 		if(req.debugID.present())
 			g_traceBatch.addEvent("CommitDebug", tlogDebugID.get().first(), "TLog.tLogCommit.AfterTLogCommit");
