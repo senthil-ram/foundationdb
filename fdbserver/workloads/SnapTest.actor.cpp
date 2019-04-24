@@ -266,7 +266,6 @@ public: // workload functions
 					begin = firstGreaterThan(kvRange.end()[-1].key);
 				} catch (Error& e) {
 					wait(tr.onError(e));
-					cnt = 0;
 				}
 			}
 			TraceEvent("SnapTestVerifyCntValue").detail("Value", cnt);
