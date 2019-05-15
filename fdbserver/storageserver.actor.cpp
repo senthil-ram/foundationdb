@@ -2427,6 +2427,16 @@ private:
 			BinaryReader br(m.param2, Unversioned());
 			br >> rollbackVersion;
 
+			if (rollbackVersion < restoredVersion) {
+				TraceEvent(SevError, "RestoreVersionInvalid")
+					.detail("FromVersion", fromVersion)
+					.detail("RollbackVersion", rollbackVersion)
+					.detail("AtVersion", currentVersion)
+					.detail("StorageVersion", data->storageVersion())
+					.detail("RestoredVersion", restoredVersion);
+				ASSERT(rollbackVersion >= restoredVersion);
+			}
+
 			if ( rollbackVersion < fromVersion && rollbackVersion > restoredVersion ) {
 				TEST( true );  // ShardApplyPrivateData shard rollback
 				TraceEvent(SevWarn, "Rollback", data->thisServerID)
