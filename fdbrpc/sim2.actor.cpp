@@ -18,6 +18,8 @@
  * limitations under the License.
  */
 
+#include <cinttypes>
+
 #include "fdbrpc/simulator.h"
 #include "flow/IThreadPool.h"
 #include "flow/Util.h"
@@ -172,7 +174,7 @@ SimClogging g_clogging;
 
 struct Sim2Conn : IConnection, ReferenceCounted<Sim2Conn> {
 	Sim2Conn( ISimulator::ProcessInfo* process )
-		: process(process), dbgid( g_random->randomUniqueID() ), opened(false), closedByCaller(false)
+		: process(process), dbgid( g_random->randomUniqueID() ), opened(false), closedByCaller(false), stopReceive(Never())
 	{
 		pipes = sender(this) && receiver(this);
 	}
@@ -207,6 +209,7 @@ struct Sim2Conn : IConnection, ReferenceCounted<Sim2Conn> {
 
 	void peerClosed() {
 		leakedConnectionTracker = trackLeakedConnection(this);
+		stopReceive = delay(1.0);
 	}
 
 	// Reads as many bytes as possible from the read buffer into [begin,end) and returns the number of bytes read (might be 0)
@@ -283,6 +286,7 @@ private:
 	Future<Void> leakedConnectionTracker;
 
 	Future<Void> pipes;
+	Future<Void> stopReceive;
 
 	int availableSendBufferForPeer() const { return sendBufSize - (writtenBytes.get() - receivedBytes.get()); }  // SOMEDAY: acknowledgedBytes instead of receivedBytes
 
@@ -315,6 +319,9 @@ private:
 			ASSERT( g_simulator.getCurrentProcess() == self->process );
 			wait( delay( g_clogging.getRecvDelay( self->process->address, self->peerProcess->address ) ) );
 			ASSERT( g_simulator.getCurrentProcess() == self->process );
+			if(self->stopReceive.isReady()) {
+				wait(Future<Void>(Never()));
+			}
 			self->receivedBytes.set( pos );
 			wait( Future<Void>(Void()) );  // Prior notification can delete self and cancel this actor
 			ASSERT( g_simulator.getCurrentProcess() == self->process );
@@ -528,7 +535,7 @@ private:
 		        ( (uintptr_t)data % 4096 == 0 && length % 4096 == 0 && offset % 4096 == 0 ) );  // Required by KAIO.
 		state UID opId = g_random->randomUniqueID();
 		if (randLog)
-			fprintf( randLog, "SFR1 %s %s %s %d %lld\n", self->dbgId.shortString().c_str(), self->filename.c_str(), opId.shortString().c_str(), length, offset );
+			fprintf( randLog, "SFR1 %s %s %s %d %" PRId64 "\n", self->dbgId.shortString().c_str(), self->filename.c_str(), opId.shortString().c_str(), length, offset );
 
 		wait( waitUntilDiskReady( self->diskParameters, length ) );
 
@@ -562,7 +569,7 @@ private:
 		if (randLog) {
 			uint32_t a=0, b=0;
 			hashlittle2( data.begin(), data.size(), &a, &b );
-			fprintf( randLog, "SFW1 %s %s %s %d %d %lld\n", self->dbgId.shortString().c_str(), self->filename.c_str(), opId.shortString().c_str(), a, data.size(), offset );
+			fprintf( randLog, "SFW1 %s %s %s %d %d %" PRId64 "\n", self->dbgId.shortString().c_str(), self->filename.c_str(), opId.shortString().c_str(), a, data.size(), offset );
 		}
 
 		if(self->delayOnWrite)
@@ -599,13 +606,18 @@ private:
 	ACTOR static Future<Void> truncate_impl( SimpleFile* self, int64_t size ) {
 		state UID opId = g_random->randomUniqueID();
 		if (randLog)
-			fprintf( randLog, "SFT1 %s %s %s %lld\n", self->dbgId.shortString().c_str(), self->filename.c_str(), opId.shortString().c_str(), size );
+			fprintf( randLog, "SFT1 %s %s %s %" PRId64 "\n", self->dbgId.shortString().c_str(), self->filename.c_str(), opId.shortString().c_str(), size );
+
+		if (size == 0) {
+			// KAIO will return EINVAL, as len==0 is an error.
+			throw io_error();
+		}
 
 		if(self->delayOnWrite)
 			wait( waitUntilDiskReady( self->diskParameters, 0 ) );
 
 		if( _chsize( self->h, (long) size ) == -1 ) {
-			TraceEvent(SevWarn, "SimpleFileIOError").detail("Location", 6);
+			TraceEvent(SevWarn, "SimpleFileIOError").detail("Location", 6).detail("Filename", self->filename).detail("Size", size).detail("Fd", self->h).GetLastError();
 			throw io_error();
 		}
 
@@ -665,7 +677,7 @@ private:
 		}
 
 		if (randLog)
-			fprintf(randLog, "SFS2 %s %s %s %lld\n", self->dbgId.shortString().c_str(), self->filename.c_str(), opId.shortString().c_str(), pos);
+			fprintf(randLog, "SFS2 %s %s %s %" PRId64 "\n", self->dbgId.shortString().c_str(), self->filename.c_str(), opId.shortString().c_str(), pos);
 		INJECT_FAULT( io_error, "SimpleFile::size" );
 
 		return pos;
@@ -749,7 +761,7 @@ public:
 		return f;
 	}
 	ACTOR static Future<Void> checkShutdown(Sim2 *self, int taskID) {
-		ISimulator::KillType kt = wait( self->getCurrentProcess()->shutdownSignal.getFuture() );
+		wait(success(self->getCurrentProcess()->shutdownSignal.getFuture()));
 		self->setCurrentTask(taskID);
 		return Void();
 	}
@@ -1069,6 +1081,10 @@ public:
 		}
 
 		return primaryTLogsDead || primaryProcessesDead.validate(storagePolicy);
+	}
+
+	virtual bool useObjectSerializer() const {
+		return net2->useObjectSerializer();
 	}
 
 	// The following function will determine if the specified configuration of available and dead processes can allow the cluster to survive
@@ -1563,10 +1579,10 @@ public:
 		machines.erase(machineId);
 	}
 
-	Sim2() : time(0.0), taskCount(0), yielded(false), yield_limit(0), currentTaskID(-1) {
+	Sim2(bool objSerializer) : time(0.0), taskCount(0), yielded(false), yield_limit(0), currentTaskID(-1) {
 		// Not letting currentProcess be NULL eliminates some annoying special cases
-		currentProcess = new ProcessInfo( "NoMachine", LocalityData(Optional<Standalone<StringRef>>(), StringRef(), StringRef(), StringRef()), ProcessClass(), {NetworkAddress()}, this, "", "" );
-		g_network = net2 = newNet2(false, true);
+		currentProcess = new ProcessInfo("NoMachine", LocalityData(Optional<Standalone<StringRef>>(), StringRef(), StringRef(), StringRef()), ProcessClass(), {NetworkAddress()}, this, "", "");
+		g_network = net2 = newNet2(false, true, objSerializer);
 		Net2FileSystem::newFileSystem();
 		check_yield(0);
 	}
@@ -1622,7 +1638,7 @@ public:
 			//}
 
 			if (randLog)
-				fprintf( randLog, "T %f %d %s %lld\n", this->time, int(g_random->peek() % 10000), t.machine ? t.machine->name : "none", t.stable);
+				fprintf( randLog, "T %f %d %s %" PRId64 "\n", this->time, int(g_random->peek() % 10000), t.machine ? t.machine->name : "none", t.stable);
 		}
 	}
 
@@ -1671,9 +1687,9 @@ public:
 	int yield_limit;  // how many more times yield may return false before next returning true
 };
 
-void startNewSimulator() {
+void startNewSimulator(bool objSerializer) {
 	ASSERT( !g_network );
-	g_network = g_pSimulator = new Sim2();
+	g_network = g_pSimulator = new Sim2(objSerializer);
 	g_simulator.connectionFailuresDisableDuration = g_random->random01() < 0.5 ? 0 : 1e6;
 }
 

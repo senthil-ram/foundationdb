@@ -43,6 +43,8 @@
 #undef min
 #endif
 
+int g_trace_depth = 0;
+
 class DummyThreadPool : public IThreadPool, ReferenceCounted<DummyThreadPool> {
 public:
 	~DummyThreadPool() {}
@@ -653,15 +655,20 @@ void removeTraceRole(std::string role) {
 	g_traceLog.removeRole(role);
 }
 
-TraceEvent::TraceEvent( const char* type, UID id ) : id(id), type(type), severity(SevInfo), initialized(false), enabled(true) {}
+TraceEvent::TraceEvent( const char* type, UID id ) : id(id), type(type), severity(SevInfo), initialized(false), enabled(true) {
+	g_trace_depth++;
+}
 TraceEvent::TraceEvent( Severity severity, const char* type, UID id )
 	: id(id), type(type), severity(severity), initialized(false),
-	  enabled(g_network == nullptr || FLOW_KNOBS->MIN_TRACE_SEVERITY <= severity) {}
+	  enabled(g_network == nullptr || FLOW_KNOBS->MIN_TRACE_SEVERITY <= severity) {
+	g_trace_depth++;
+}
 TraceEvent::TraceEvent( TraceInterval& interval, UID id )
 	: id(id), type(interval.type)
 	, severity(interval.severity)
 	, initialized(false)
 	, enabled(g_network == nullptr || FLOW_KNOBS->MIN_TRACE_SEVERITY <= interval.severity) {
+	g_trace_depth++;
 	init(interval);
 }
 TraceEvent::TraceEvent( Severity severity, TraceInterval& interval, UID id )
@@ -669,6 +676,7 @@ TraceEvent::TraceEvent( Severity severity, TraceInterval& interval, UID id )
 	  severity(severity),
 	  initialized(false),
 	  enabled(g_network == nullptr || FLOW_KNOBS->MIN_TRACE_SEVERITY <= severity) {
+	g_trace_depth++;
 	init(interval);
 }
 
@@ -913,7 +921,10 @@ TraceEvent::~TraceEvent() {
 				severity = SevError;
 			}
 
-			TraceEvent::eventCounts[severity/10]++;
+			if(isNetworkThread()) {
+				TraceEvent::eventCounts[severity/10]++;
+			}
+
 			g_traceLog.writeEvent( fields, trackingKey, severity > SevWarnAlways );
 
 			if (g_traceLog.isOpen()) {
@@ -933,6 +944,7 @@ TraceEvent::~TraceEvent() {
 		TraceEvent(SevError, "TraceEventDestructorError").error(e,true);
 	}
 	delete tmpEventMetric;
+	g_trace_depth--;
 }
 
 thread_local bool TraceEvent::networkThread = false;
@@ -1086,6 +1098,7 @@ std::string TraceEventFields::getValue(std::string key) const {
 	}
 	else {
 		TraceEvent ev(SevWarn, "TraceEventFieldNotFound");
+		ev.suppressFor(1.0);
 		if(tryGetValue("Type", value)) {
 			ev.detail("Event", value);
 		}

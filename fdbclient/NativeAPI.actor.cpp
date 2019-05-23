@@ -62,6 +62,7 @@ extern const char* getHGVersion();
 using std::make_pair;
 using std::max;
 using std::min;
+using std::pair;
 
 NetworkOptions networkOptions;
 Reference<TLSOptions> tlsOptions;
@@ -869,6 +870,9 @@ Future<Void> Cluster::onConnected() {
 void setNetworkOption(FDBNetworkOptions::Option option, Optional<StringRef> value) {
 	switch(option) {
 		// SOMEDAY: If the network is already started, should these three throw an error?
+		case FDBNetworkOptions::USE_OBJECT_SERIALIZER:
+			networkOptions.useObjectSerializer = extractIntOption(value) != 0;
+			break;
 		case FDBNetworkOptions::TRACE_ENABLE:
 			networkOptions.traceDirectory = value.present() ? value.get().toString() : "";
 			break;
@@ -1008,7 +1012,7 @@ void setupNetwork(uint64_t transportId, bool useMetrics) {
 	if (!networkOptions.logClientInfo.present())
 		networkOptions.logClientInfo = true;
 
-	g_network = newNet2(false, useMetrics || networkOptions.traceDirectory.present());
+	g_network = newNet2(false, useMetrics || networkOptions.traceDirectory.present(), networkOptions.useObjectSerializer);
 	FlowTransport::createInstance(transportId);
 	Net2FileSystem::newFileSystem();
 
@@ -1385,7 +1389,7 @@ ACTOR Future<Optional<Value>> getValue( Future<Version> version, Key key, Databa
 }
 
 ACTOR Future<Key> getKey( Database cx, KeySelector k, Future<Version> version, TransactionInfo info ) {
-	Version ver = wait(version);
+	wait(success(version));
 
 	if( info.debugID.present() )
 		g_traceBatch.addEvent("TransactionDebug", info.debugID.get().first(), "NativeAPI.getKey.AfterVersion");
@@ -2933,7 +2937,6 @@ ACTOR Future<Void> readVersionBatcher( DatabaseContext *cx, FutureStream< std::p
 	state PromiseStream<double> replyTimes;
 	state PromiseStream<Error> _errorStream;
 	state double batchTime = 0;
-	state double lastRequestTime = now();
 
 	loop {
 		send_batch = false;

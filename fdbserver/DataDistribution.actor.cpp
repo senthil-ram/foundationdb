@@ -745,11 +745,7 @@ struct DDTeamCollection : ReferenceCounted<DDTeamCollection> {
 					sources.insert( req.sources[i] );
 
 				for( int i = 0; i < req.sources.size(); i++ ) {
-					if( !self->server_info.count( req.sources[i] ) ) {
-						TEST( true ); // GetSimilarTeams source server now unknown
-						TraceEvent(SevWarn, "GetTeam").detail("ReqSourceUnknown", req.sources[i]);
-					}
-					else {
+					if( self->server_info.count( req.sources[i] ) ) {
 						auto& teamList = self->server_info[ req.sources[i] ]->teams;
 						for( int j = 0; j < teamList.size(); j++ ) {
 							if( teamList[j]->isHealthy() && (!req.preferLowerUtilization || teamList[j]->hasHealthyFreeSpace())) {
@@ -2322,6 +2318,8 @@ ACTOR Future<Void> teamRemover(DDTeamCollection* self) {
 				TEST(true);
 			}
 
+			self->doBuildTeams = true;
+
 			if (self->badTeamRemover.isReady()) {
 				self->badTeamRemover = removeBadTeams(self);
 				self->addActor.send(self->badTeamRemover);
@@ -2732,9 +2730,11 @@ ACTOR Future<Void> waitHealthyZoneChange( DDTeamCollection* self ) {
 			tr.setOption(FDBTransactionOptions::READ_SYSTEM_KEYS);
 			tr.setOption(FDBTransactionOptions::LOCK_AWARE);
 			Optional<Value> val = wait(tr.get(healthyZoneKey));
+			state Future<Void> healthyZoneTimeout = Never();
 			if(val.present()) {
 				auto p = decodeHealthyZoneValue(val.get());
 				if(p.second > tr.getReadVersion().get()) {
+					healthyZoneTimeout = delay((p.second - tr.getReadVersion().get())/(double)SERVER_KNOBS->VERSIONS_PER_SECOND);
 					self->healthyZone.set(p.first);
 				} else {
 					self->healthyZone.set(Optional<Key>());
@@ -2742,9 +2742,10 @@ ACTOR Future<Void> waitHealthyZoneChange( DDTeamCollection* self ) {
 			} else {
 				self->healthyZone.set(Optional<Key>());
 			}
+			
 			state Future<Void> watchFuture = tr.watch(healthyZoneKey);
 			wait(tr.commit());
-			wait(watchFuture);
+			wait(watchFuture || healthyZoneTimeout);
 			tr.reset();
 		} catch(Error& e) {
 			wait( tr.onError(e) );
@@ -2824,24 +2825,15 @@ ACTOR Future<Void> storageServerFailureTracker(
 		if( status->isFailed )
 			self->restartRecruiting.trigger();
 
-		state double startTime = now();
 		Future<Void> healthChanged = Never();
 		if(status->isFailed) {
 			ASSERT(!inHealthyZone);
 			healthChanged = IFailureMonitor::failureMonitor().onStateEqual( interf.waitFailure.getEndpoint(), FailureStatus(false));
 		} else if(!inHealthyZone) {
-			healthChanged = waitFailureClient(interf.waitFailure, SERVER_KNOBS->DATA_DISTRIBUTION_FAILURE_REACTION_TIME, 0, TaskDataDistribution);
+			healthChanged = waitFailureClientStrict(interf.waitFailure, SERVER_KNOBS->DATA_DISTRIBUTION_FAILURE_REACTION_TIME, TaskDataDistribution);
 		}
 		choose {
 			when ( wait(healthChanged) ) {
-				double elapsed = now() - startTime;
-				if(!status->isFailed && elapsed < SERVER_KNOBS->DATA_DISTRIBUTION_FAILURE_REACTION_TIME) {
-					wait(delay(SERVER_KNOBS->DATA_DISTRIBUTION_FAILURE_REACTION_TIME - elapsed));
-					if(!IFailureMonitor::failureMonitor().getState( interf.waitFailure.getEndpoint() ).isFailed()) {
-						continue;
-					}
-				}
-
 				status->isFailed = !status->isFailed;
 				if(!status->isFailed && !server->teams.size()) {
 					self->doBuildTeams = true;

@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+#include <cinttypes>
 #include "fdbserver/Status.h"
 #include "flow/Trace.h"
 #include "fdbclient/NativeAPI.actor.h"
@@ -169,7 +170,7 @@ public:
 	}
 
 	StatusCounter& parseText(const std::string& parsableText) {
-		sscanf(parsableText.c_str(), "%lf %lf %lld", &hz, &roughness, &counter);
+		sscanf(parsableText.c_str(), "%lf %lf %" SCNd64 "", &hz, &roughness, &counter);
 		return *this;
 	}
 
@@ -547,7 +548,6 @@ ACTOR static Future<JsonBuilderObject> processStatusFetcher(
     Database cx, Optional<DatabaseConfiguration> configuration, Optional<Key> healthyZone, std::set<std::string>* incomplete_reasons) {
 
 	state JsonBuilderObject processMap;
-	state double metric;
 
 	// construct a map from a process address to a status object containing a trace file open error
 	// this is later added to the messages subsection
@@ -606,6 +606,24 @@ ACTOR static Future<JsonBuilderObject> processStatusFetcher(
 
 	if (db->get().ratekeeper.present()) {
 		roles.addRole("ratekeeper", db->get().ratekeeper.get());
+	}
+
+	for(auto& tLogSet : db->get().logSystemConfig.tLogs) {
+		for(auto& it : tLogSet.logRouters) {
+			if(it.present()) {
+				roles.addRole("router", it.interf());
+			}
+		}
+	}
+
+	for(auto& old : db->get().logSystemConfig.oldTLogs) {
+		for(auto& tLogSet : old.tLogs) {
+			for(auto& it : tLogSet.logRouters) {
+				if(it.present()) {
+					roles.addRole("router", it.interf());
+				}
+			}
+		}
 	}
 
 	state std::vector<std::pair<MasterProxyInterface, EventMap>>::iterator proxy;
@@ -1154,18 +1172,21 @@ ACTOR static Future<JsonBuilderObject> dataStatusFetcher(WorkerDetails ddWorker,
 		TraceEventFields md = dataInfo[2];
 
 		// If we have a MovingData message, parse it.
+		int64_t partitionsInFlight = 0;
+		int movingHighestPriority = 1000;
 		if (md.size())
 		{
 			int64_t partitionsInQueue = md.getInt64("InQueue");
-			int64_t partitionsInFlight = md.getInt64("InFlight");
 			int64_t averagePartitionSize = md.getInt64("AverageShardSize");
+			partitionsInFlight = md.getInt64("InFlight");
+			movingHighestPriority = md.getInt("HighestPriority");
 
 			if( averagePartitionSize >= 0 ) {
 				JsonBuilderObject moving_data;
 				moving_data["in_queue_bytes"] = partitionsInQueue * averagePartitionSize;
 				moving_data["in_flight_bytes"] = partitionsInFlight * averagePartitionSize;
 				moving_data.setKeyRawNumber("total_written_bytes",md.getValue("BytesWritten"));
-				moving_data.setKeyRawNumber("highest_priority",md.getValue("HighestPriority"));
+				moving_data["highest_priority"] = movingHighestPriority;
 
 				// TODO: moving_data["rate_bytes"] = makeCounter(hz, c, r);
 				statusObjData["moving_data"] = moving_data;
@@ -1188,6 +1209,12 @@ ACTOR static Future<JsonBuilderObject> dataStatusFetcher(WorkerDetails ddWorker,
 
 			bool primary = inFlight.getInt("Primary");
 			int highestPriority = inFlight.getInt("HighestPriority");
+			
+			if(movingHighestPriority < PRIORITY_TEAM_REDUNDANT) {
+				highestPriority = movingHighestPriority;
+			} else if(partitionsInFlight > 0) {
+				highestPriority = std::max<int>(highestPriority, PRIORITY_MERGE_SHARD);
+			}
 
 			JsonBuilderObject team_tracker;
 			team_tracker["primary"] = primary;
@@ -1242,6 +1269,10 @@ ACTOR static Future<JsonBuilderObject> dataStatusFetcher(WorkerDetails ddWorker,
 				stateSectionObj["name"] = "healthy_removing_server";
 				stateSectionObj["description"] = "Removing storage server";
 			}
+			else if (highestPriority == PRIORITY_TEAM_HEALTHY) {
+ 				stateSectionObj["healthy"] = true;
+ 				stateSectionObj["name"] = "healthy";
+ 			}
 			else if (highestPriority >= PRIORITY_REBALANCE_SHARD) {
 				stateSectionObj["healthy"] = true;
 				stateSectionObj["name"] = "healthy_rebalancing";
@@ -1787,9 +1818,7 @@ ACTOR Future<JsonBuilderObject> lockedStatusFetcher(Reference<AsyncVar<struct Se
 		tr.setOption(FDBTransactionOptions::PRIORITY_SYSTEM_IMMEDIATE);
 		try {
 			choose{
-				when(Version f = wait(tr.getReadVersion())) {
-					statusObj["database_locked"] = false;
-				}
+				when(wait(success(tr.getReadVersion()))) { statusObj["database_locked"] = false; }
 
 				when(wait(getTimeout)) {
 					incomplete_reasons->insert(format("Unable to determine if database is locked after %d seconds.", timeoutSeconds));
@@ -2354,7 +2383,7 @@ TEST_CASE("/status/json/builderPerf") {
 	}
 
 	double elapsed = generated + serialized;
-	printf("RESULT: %lld bytes  %d elements  %d levels  %f seconds (%f gen, %f serialize)  %f MB/s  %f items/s\n",
+	printf("RESULT: %" PRId64 " bytes  %d elements  %d levels  %f seconds (%f gen, %f serialize)  %f MB/s  %f items/s\n",
 		bytes, iterations*elements, level, elapsed, generated, elapsed - generated, bytes / elapsed / 1e6, iterations*elements / elapsed);
 
 	return Void();

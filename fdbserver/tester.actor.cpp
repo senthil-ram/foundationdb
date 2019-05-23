@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+#include <cinttypes>
 #include <fstream>
 #include "flow/ActorCollection.h"
 #include "fdbrpc/sim_validation.h"
@@ -65,7 +66,7 @@ Key doubleToTestKey( double p ) {
 
 double testKeyToDouble( const KeyRef& p ) {
 	uint64_t x = 0;
-	sscanf( p.toString().c_str(), "%llx", &x );
+	sscanf( p.toString().c_str(), "%" SCNx64, &x );
 	return *(double*)&x;
 }
 
@@ -163,7 +164,7 @@ uint64_t getOption( VectorRef<KeyValueRef> options, Key key, uint64_t defaultVal
 	for(int i = 0; i < options.size(); i++)
 		if( options[i].key == key ) {
 			uint64_t r;
-			if( sscanf(options[i].value.toString().c_str(), "%lld", &r) ) {
+			if( sscanf(options[i].value.toString().c_str(), "%" SCNd64, &r) ) {
 				options[i].value = LiteralStringRef("");
 				return r;
 			} else {
@@ -179,7 +180,7 @@ int64_t getOption( VectorRef<KeyValueRef> options, Key key, int64_t defaultValue
 	for(int i = 0; i < options.size(); i++)
 		if( options[i].key == key ) {
 			int64_t r;
-			if( sscanf(options[i].value.toString().c_str(), "%lld", &r) ) {
+			if( sscanf(options[i].value.toString().c_str(), "%" SCNd64, &r) ) {
 				options[i].value = LiteralStringRef("");
 				return r;
 			} else {
@@ -346,7 +347,7 @@ TestWorkload *getWorkloadIface( WorkloadRequest work, Reference<AsyncVar<ServerD
 ACTOR Future<Void> databaseWarmer( Database cx ) {
 	loop {
 		state Transaction tr( cx );
-		Version v = wait( tr.getReadVersion() );
+		wait(success(tr.getReadVersion()));
 		wait( delay( 0.25 ) );
 	}
 }
@@ -566,7 +567,7 @@ ACTOR Future<Void> clearData( Database cx ) {
 			// any other transactions
 			tr.clear( normalKeys );
 			tr.makeSelfConflicting();
-			Version v = wait( tr.getReadVersion() );  // required since we use addReadConflictRange but not get
+			wait(success(tr.getReadVersion())); // required since we use addReadConflictRange but not get
 			wait( tr.commit() );
 			TraceEvent("TesterClearingDatabase").detail("AtVersion", tr.getCommittedVersion());
 			break;
@@ -756,12 +757,16 @@ ACTOR Future<Void> checkConsistency(Database cx, std::vector< TesterInterface > 
 	}
 	
 	Standalone<VectorRef<KeyValueRef>> options;
+	StringRef performQuiescent = LiteralStringRef("false");
+	if (doQuiescentCheck) {
+		performQuiescent = LiteralStringRef("true");
+	}
 	spec.title = LiteralStringRef("ConsistencyCheck");
 	spec.databasePingDelay = databasePingDelay;
 	spec.timeout = 32000;
 	options.push_back_deep(options.arena(), KeyValueRef(LiteralStringRef("testName"), LiteralStringRef("ConsistencyCheck")));
-	options.push_back_deep(options.arena(), KeyValueRef(LiteralStringRef("performQuiescentChecks"), ValueRef(format("%s", LiteralStringRef(doQuiescentCheck ? "true" : "false").toString().c_str()))));
-	options.push_back_deep(options.arena(), KeyValueRef(LiteralStringRef("quiescentWaitTimeout"), ValueRef(format("%f", quiescentWaitTimeout))));
+	options.push_back_deep(options.arena(), KeyValueRef(LiteralStringRef("performQuiescentChecks"), performQuiescent));
+	options.push_back_deep(options.arena(), KeyValueRef(LiteralStringRef("quiescentWaitTimeout"), ValueRef(options.arena(), format("%f", quiescentWaitTimeout))));
 	options.push_back_deep(options.arena(), KeyValueRef(LiteralStringRef("distributed"), LiteralStringRef("false")));
 	spec.options.push_back_deep(spec.options.arena(), options);
 
@@ -1073,7 +1078,7 @@ ACTOR Future<Void> runTests( Reference<AsyncVar<Optional<struct ClusterControlle
 	TraceEvent("TestsExpectedToPass").detail("Count", tests.size());
 	state int idx = 0;
 	for(; idx < tests.size(); idx++ ) {
-		bool ok = wait( runTest( cx, testers, tests[idx], dbInfo ) );
+		wait(success(runTest(cx, testers, tests[idx], dbInfo)));
 		// do we handle a failure here?
 	}
 

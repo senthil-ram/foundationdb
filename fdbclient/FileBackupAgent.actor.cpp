@@ -26,6 +26,7 @@
 #include "fdbclient/KeyBackedTypes.h"
 #include "fdbclient/JsonBuilder.h"
 
+#include <cinttypes>
 #include <ctime>
 #include <climits>
 #include "fdbrpc/IAsyncFile.h"
@@ -345,7 +346,7 @@ ACTOR Future<std::string> RestoreConfig::getProgress_impl(RestoreConfig restore,
 
 	std::string errstr = "None";
 	if(lastError.get().second != 0)
-		errstr = format("'%s' %llds ago.\n", lastError.get().first.c_str(), (tr->getReadVersion().get() - lastError.get().second) / CLIENT_KNOBS->CORE_VERSIONSPERSECOND );
+		errstr = format("'%s' %" PRId64 "s ago.\n", lastError.get().first.c_str(), (tr->getReadVersion().get() - lastError.get().second) / CLIENT_KNOBS->CORE_VERSIONSPERSECOND );
 
 	TraceEvent("FileRestoreProgress")
 		.detail("RestoreUID", uid)
@@ -386,7 +387,6 @@ ACTOR Future<std::string> RestoreConfig::getFullStatus_impl(RestoreConfig restor
 	state Future<std::string> progress = restore.getProgress(tr);
 
 	// restore might no longer be valid after the first wait so make sure it is not needed anymore.
-	state UID uid = restore.getUid();
 	wait(success(ranges) && success(addPrefix) && success(removePrefix) && success(url) && success(restoreVersion) && success(progress));
 
 	std::string returnStr;
@@ -1865,7 +1865,6 @@ namespace fileBackup {
 			state int blockSize = BUGGIFY ? g_random->randomInt(125e3, 4e6) : CLIENT_KNOBS->BACKUP_LOGFILE_BLOCK_SIZE;
 			state Reference<IBackupFile> outFile = wait(bc->writeLogFile(beginVersion, endVersion, blockSize));
 			state LogFileWriter logFile(outFile, blockSize);
-			state size_t idx;
 
 			state PromiseStream<RangeResultWithVersion> results;
 			state std::vector<Future<Void>> rc;
@@ -3820,7 +3819,7 @@ public:
 			tr->setOption(FDBTransactionOptions::COMMIT_ON_FIRST_PROXY);
 
 			state Key destUidValue = wait(config.destUidValue().getOrThrow(tr));
-			state Version endVersion = wait(tr->getReadVersion());
+			wait(success(tr->getReadVersion()));
 
 			wait(success(fileBackup::EraseLogRangeTaskFunc::addTask(tr, backupAgent->taskBucket, config.getUid(), TaskCompletionKey::noSignal(), destUidValue)));
 
@@ -3923,6 +3922,8 @@ public:
 				doc.setKey("Tag", tag.tagName);
 
 				if(uidAndAbortedFlag.present()) {
+					doc.setKey("UID", uidAndAbortedFlag.get().first.toString());
+
 					state BackupConfig config(uidAndAbortedFlag.get().first);
 
 					state EBackupState backupState = wait(config.stateEnum().getD(tr, false, EBackupState::STATE_NEVERRAN));
@@ -4229,7 +4230,7 @@ public:
 			TraceEvent(SevWarn, "FileBackupAgentRestoreNotPossible")
 				.detail("BackupContainer", bc->getURL())
 				.detail("TargetVersion", targetVersion);
-			fprintf(stderr, "ERROR: Restore version %lld is not possible from %s\n", targetVersion, bc->getURL().c_str());
+			fprintf(stderr, "ERROR: Restore version %" PRId64 " is not possible from %s\n", targetVersion, bc->getURL().c_str());
 			throw restore_invalid_version();
 		}
 

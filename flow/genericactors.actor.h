@@ -175,7 +175,7 @@ Future<Void> waitForAllReady( std::vector<Future<T>> results ) {
 	loop {
 		if (i == results.size()) return Void();
 		try {
-			T r = wait( results[i] );
+			wait(success(results[i]));
 		} catch (...) {
 		}
 		i++;
@@ -736,11 +736,18 @@ private:
 	}
 };
 
-ACTOR template <class T> Future<Void> asyncDeserialize( Reference<AsyncVar<Standalone<StringRef>>> input, Reference<AsyncVar<Optional<T>>> output ) {
+ACTOR template <class T> Future<Void> asyncDeserialize( Reference<AsyncVar<Standalone<StringRef>>> input, Reference<AsyncVar<Optional<T>>> output, bool useObjSerializer ) {
 	loop {
-		if (input->get().size())
-			output->set( BinaryReader::fromStringRef<T>( input->get(), IncludeVersion() ) );
-		else
+		if (input->get().size()) {
+			if (useObjSerializer) {
+				ObjectReader reader(input->get().begin());
+				T res;
+				reader.deserialize(res);
+				output->set(res);
+			} else {
+				output->set( BinaryReader::fromStringRef<T>( input->get(), IncludeVersion() ) );
+			}
+		} else
 			output->set( Optional<T>() );
 		wait( input->onChange() );
 	}
@@ -1024,13 +1031,14 @@ ACTOR template <class T> Future<Void> onEqual( Future<T> in, T equalTo ) {
 ACTOR template <class T>
 Future<Void> success( Future<T> of ) {
 	T t = wait( of );
+	(void)t;
 	return Void();
 }
 
 ACTOR template <class T>
 Future<Void> ready( Future<T> f ) {
 	try {
-		T _ = wait( f );
+		wait(success(f));
 	} catch (...) {
 	}
 	return Void();
