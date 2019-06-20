@@ -25,6 +25,7 @@ testTitle=SnapTestTakeSnap
         maxSnapDelay=10.0
         testID=1
         clearAfterTest=false
+        version=2
 
         testName=Attrition
         testDuration=10.0
