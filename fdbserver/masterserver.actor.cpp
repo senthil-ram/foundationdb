@@ -700,9 +700,9 @@ ACTOR Future<Void> readTransactionSystemState( Reference<MasterData> self, Refer
 
 	uniquify(self->allTags);
 
-	//auto kvs = self->txnStateStore->readRange( systemKeys );
-	//for( auto & kv : kvs.get() )
-	//	TraceEvent("MasterRecoveredTXS", self->dbgid).detail("K", kv.key).detail("V", kv.value);
+	auto kvs = self->txnStateStore->readRange( systemKeys );
+	for( auto & kv : kvs.get() )
+		TraceEvent("MasterRecoveredTXS", self->dbgid).detail("K", kv.key).detail("V", printable(kv.value));
 
 	self->txnStateLogAdapter->setNextVersion( oldLogSystem->getEnd() );  //< FIXME: (1) the log adapter should do this automatically after recovery; (2) if we make KeyValueStoreMemory guarantee immediate reads, we should be able to get rid of the discardCommit() below and not need a writable log adapter
 

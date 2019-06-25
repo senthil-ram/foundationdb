@@ -34,12 +34,10 @@ ACTOR Future<MoveKeysLock> takeMoveKeysLock( Database cx, UID masterId ) {
 		try {
 			state MoveKeysLock lock;
 			tr.setOption(FDBTransactionOptions::PRIORITY_SYSTEM_IMMEDIATE);
-			if( !g_network->isSimulated() ) {
-				UID id(deterministicRandom()->randomUniqueID());
-				TraceEvent("TakeMoveKeysLockTransaction", masterId)
-					.detail("TransactionUID", id);
-				tr.debugTransaction( id );
-			}
+			UID id(deterministicRandom()->randomUniqueID());
+			TraceEvent("TakeMoveKeysLockTransaction", masterId)
+				.detail("TransactionUID", id);
+			tr.debugTransaction( id );
 			{
 				Optional<Value> readVal = wait( tr.get( moveKeysLockOwnerKey ) );
 				lock.prevOwner = readVal.present() ? BinaryReader::fromStringRef<UID>(readVal.get(), Unversioned()) : UID();
@@ -51,6 +49,8 @@ ACTOR Future<MoveKeysLock> takeMoveKeysLock( Database cx, UID masterId ) {
 			lock.myOwner = deterministicRandom()->randomUniqueID();
 			return lock;
 		} catch (Error &e){
+			TraceEvent("TakeMoveKeysLockTransactionErr", masterId)
+				.error(e);
 			wait(tr.onError(e));
 			TEST(true);  // takeMoveKeysLock retry
 		}

@@ -1425,6 +1425,7 @@ ACTOR Future<Optional<Value>> getValue( Future<Version> version, Key key, Databa
 					.detail("Key", key)
 					.detail("ReqVersion", ver)
 					.detail("ReplySize", reply.value.present() ? reply.value.get().size() : -1);*/
+				TraceEvent("GetValueDebugError").error(e);
 			}
 			if (e.code() == error_code_wrong_shard_server || e.code() == error_code_all_alternatives_failed ||
 				(e.code() == error_code_transaction_too_old && ver == latestVersion) ) {
