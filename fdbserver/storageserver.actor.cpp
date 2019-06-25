@@ -337,6 +337,8 @@ public:
 	void byteSampleApplyClear( KeyRangeRef range, Version ver );
 
 	void popVersion(Version v, bool popAllTags = false) {
+		TraceEvent("StoragePop")
+			.detail("PopVersion", v);
 		if(logSystem) {
 			if(v > poppedAllAfter) {
 				popAllTags = true;
@@ -1605,6 +1607,8 @@ bool changeDurableVersion( StorageServer* data, Version desiredDurableVersion ) 
 
 	Future<Void> checkFatalError = data->otherError.getFuture();
 	data->durableVersion.set( nextDurableVersion );
+	TraceEvent("NewDataDurableVersion")
+		.detail("Version", data->durableVersion.get());
 	setDataDurableVersion(data->thisServerID, data->durableVersion.get());
 	if (checkFatalError.isReady()) checkFatalError.get();
 
@@ -2578,6 +2582,9 @@ private:
 ACTOR Future<Void> update( StorageServer* data, bool* pReceivedUpdate )
 {
 	state double start;
+	if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+		TraceEvent("DbgStorageIssue_Update1");
+	}
 	try {
 		// If we are disk bound and durableVersion is very old, we need to block updates or we could run out of memory
 		// This is often referred to as the storage server e-brake (emergency brake)
@@ -2602,14 +2609,27 @@ ACTOR Future<Void> update( StorageServer* data, bool* pReceivedUpdate )
 		//TraceEvent("SSUpdatePeeking", data->thisServerID).detail("MyVer", data->version.get()).detail("Epoch", data->updateEpoch).detail("Seq", data->updateSequence);
 
 		loop {
+			if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+				TraceEvent("DbgStorageIssue_WaitingForCursor");
+			}
 			wait( cursor->getMore() );
 			if(!cursor->isExhausted()) {
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_CursorIsExhausted");
+				}
 				break;
 			}
 		}
-		if(cursor->popped() > 0)
+		if(cursor->popped() > 0) {
+			if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+				TraceEvent("DbgStorageIssue_CursorPopped>0");
+			}
 			throw worker_removed();
+		}
 
+		if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+			TraceEvent("DbgStorageIssue_AfterUpdate1");
+		}
 		++data->counters.updateBatches;
 		data->lastTLogVersion = cursor->getMaxKnownVersion();
 		data->versionLag = std::max<int64_t>(0, data->lastTLogVersion - data->version.get());
@@ -2718,7 +2738,10 @@ ACTOR Future<Void> update( StorageServer* data, bool* pReceivedUpdate )
 
 		state Version ver = invalidVersion;
 		cloneCursor2->setProtocolVersion(data->logProtocol);
-		//TraceEvent("SSUpdatePeeked", data->thisServerID).detail("FromEpoch", data->updateEpoch).detail("FromSeq", data->updateSequence).detail("ToEpoch", results.end_epoch).detail("ToSeq", results.end_seq).detail("MsgSize", results.messages.size());
+		if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+			TraceEvent("SSUpdatePeeked");
+		// TraceEvent("SSUpdatePeeked", data->thisServerID).detail("FromEpoch", data->updateEpoch).detail("FromSeq", data->updateSequence).detail("ToEpoch", results.end_epoch).detail("ToSeq", results.end_seq).detail("MsgSize", results.messages.size());
+		}
 		for (;cloneCursor2->hasMessage(); cloneCursor2->nextMessage()) {
 			if(mutationBytes > SERVER_KNOBS->DESIRED_UPDATE_BYTES) {
 				mutationBytes = 0;
@@ -3498,6 +3521,9 @@ ACTOR Future<Void> storageServerCore( StorageServer* self, StorageServerInterfac
 
 		choose {
 			when( wait( checkLastUpdate ) ) {
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_CheckLastUpdate");
+				}
 				if(now() - self->lastUpdate >= CLIENT_KNOBS->NO_RECENT_UPDATES_DURATION) {
 					self->noRecentUpdates.set(true);
 					checkLastUpdate = delay(CLIENT_KNOBS->NO_RECENT_UPDATES_DURATION);
@@ -3508,15 +3534,37 @@ ACTOR Future<Void> storageServerCore( StorageServer* self, StorageServerInterfac
 			when( wait( dbInfoChange ) ) {
 				TEST( self->logSystem );  // shardServer dbInfo changed
 				dbInfoChange = self->db->onChange();
+				if (true || g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_DBInfoChange");
+				}
 				if( self->db->get().recoveryState >= RecoveryState::ACCEPTING_COMMITS ) {
 					self->logSystem = ILogSystem::fromServerDBInfo( self->thisServerID, self->db->get() );
+					if (true || g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+						TraceEvent("DbgStorageIssue_DBInfoChangeInside");
+					}
 					if (self->logSystem) {
+						TraceEvent("DbgStorageIssue_LogSystemIsPresent");
 						if(self->db->get().logSystemConfig.recoveredAt.present()) {
 							self->poppedAllAfter = self->db->get().logSystemConfig.recoveredAt.get();
+							TraceEvent("DbgStorageIssue_LogSystemRecoveredAtPresent")
+								.detail("PoppedAllAfter", self->poppedAllAfter);
+						}
+						TraceEvent("DbgStorageIssue_LogSystemRecoveredAtPresent")
+							.detail("PoppedAllAfter", self->poppedAllAfter)
+							.detail("ServerID", self->thisServerID)
+							.detail("Version", self->version.get())
+							.detail("Tag", self->tag.toString())
+							.detail("DurableVersion", self->durableVersion.get());
+						for (const auto & item : self->history) {
+							TraceEvent("DbgStorageIssue_VersionhistoryDetails")
+								.detail("Version", item.first)
+								.detail("Tag", item.second.toString());
 						}
 						self->logCursor = self->logSystem->peekSingle( self->thisServerID, self->version.get() + 1, self->tag, self->history );
 						self->popVersion( self->durableVersion.get() + 1, true );
 					}
+					//TraceEvent("DbgStorageIssue_misc")
+						//.detail("UpdateReceived", updateReceived);
 					// If update() is waiting for results from the tlog, it might never get them, so needs to be cancelled.  But if it is waiting later,
 					// cancelling it could cause problems (e.g. fetchKeys that already committed to transitioning to waiting state)
 					if (!updateReceived) {
@@ -3542,6 +3590,9 @@ ACTOR Future<Void> storageServerCore( StorageServer* self, StorageServerInterfac
 				// Warning: This code is executed at extremely high priority (TaskLoadBalancedEndpoint), so downgrade before doing real work
 				if( req.debugID.present() )
 					g_traceBatch.addEvent("GetValueDebug", req.debugID.get().first(), "storageServer.recieved"); //.detail("TaskID", g_network->getCurrentTask());
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_InsideGetValue");
+				}
 
 				if (SHORT_CIRCUT_ACTUAL_STORAGE && normalKeys.contains(req.key))
 					req.reply.send(GetValueReply());
@@ -3551,17 +3602,29 @@ ACTOR Future<Void> storageServerCore( StorageServer* self, StorageServerInterfac
 			when( WatchValueRequest req = waitNext(ssi.watchValue.getFuture()) ) {
 				// TODO: fast load balancing?
 				// SOMEDAY: combine watches for the same key/value into a single watch
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_WatchValue");
+				}
 				actors.add(self->readGuard(req, watchValueQ));
 			}
 			when (GetKeyRequest req = waitNext(ssi.getKey.getFuture())) {
 				// Warning: This code is executed at extremely high priority (TaskLoadBalancedEndpoint), so downgrade before doing real work
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_WatchValue1");
+				}
 				actors.add(self->readGuard(req , getKey));
 			}
 			when (GetKeyValuesRequest req = waitNext(ssi.getKeyValues.getFuture()) ) {
 				// Warning: This code is executed at extremely high priority (TaskLoadBalancedEndpoint), so downgrade before doing real work
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_WatchValue2");
+				}
 				actors.add(self->readGuard(req , getKeyValues));
 			}
 			when (GetShardStateRequest req = waitNext(ssi.getShardState.getFuture()) ) {
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_WatchValue3");
+				}
 				if (req.mode == GetShardStateRequest::NO_WAIT ) {
 					if( self->isReadable( req.keys ) )
 						req.reply.send(std::make_pair(self->version.get(),self->durableVersion.get()));
@@ -3572,22 +3635,41 @@ ACTOR Future<Void> storageServerCore( StorageServer* self, StorageServerInterfac
 				}
 			}
 			when (StorageQueuingMetricsRequest req = waitNext(ssi.getQueuingMetrics.getFuture())) {
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_WatchValue4");
+				}
 				getQueuingMetrics(self, req);
 			}
 			when( ReplyPromise<Version> reply = waitNext(ssi.getVersion.getFuture()) ) {
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_WatchValue5");
+				}
 				reply.send( self->version.get() );
 			}
 			when( ReplyPromise<KeyValueStoreType> reply = waitNext(ssi.getKeyValueStoreType.getFuture()) ) {
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_WatchValue6");
+				}
 				reply.send( self->storage.getKeyValueStoreType() );
 			}
 			when( wait(doUpdate) ) {
 				updateReceived = false;
+				if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+					TraceEvent("DbgStorageIssue_WatchValue7");
+				}
 				if (!self->logSystem)
 					doUpdate = Never();
-				else
+				else {
+					if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+						TraceEvent("DbgStorageIssue_WatchValue8");
+					}
 					doUpdate = update( self, &updateReceived );
+				}
 			}
 			when(wait(updateProcessStatsTimer)) {
+					if (g_network->getLocalAddress().toString() == "2.0.1.0:1") {
+						TraceEvent("DbgStorageIssue_WatchValue9");
+					}
 				updateProcessStats(self);
 				updateProcessStatsTimer = delay(updateProcessStatsDelay);
 			}

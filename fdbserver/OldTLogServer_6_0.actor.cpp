@@ -936,7 +936,25 @@ ACTOR Future<Void> tLogPopCore( TLogData* self, Tag inputTag, Version to, Refere
 		if(tagData->unpoppedRecovered && upTo > logData->recoveredAt) {
 			tagData->unpoppedRecovered = false;
 			logData->unpoppedRecoveredTags--;
-			TraceEvent("TLogPoppedTag", logData->logId).detail("Tags", logData->unpoppedRecoveredTags).detail("Tag", tag.toString()).detail("DurableKCVer", logData->durableKnownCommittedVersion).detail("RecoveredAt", logData->recoveredAt);
+			TraceEvent("TLogPoppedTag", logData->logId)
+				.detail("Tags", logData->unpoppedRecoveredTags)
+				.detail("Tag", tag.toString())
+				.detail("DurableKCVer", logData->durableKnownCommittedVersion)
+				.detail("RecoveredAt", logData->recoveredAt);
+			for (int i =  0; i < logData->tag_data.size(); i++) {
+				for (int j = 0; j < logData->tag_data[i].size(); j++) {
+					auto tagEntry = logData->tag_data[i][j];
+					if (tagEntry)
+					TraceEvent("DetailedTLogInfo")
+						.detail("I", i)
+						.detail("J", j)
+						.detail("Tag", tagEntry->tag.toString())
+						.detail("NothingPersistent", tagEntry->nothingPersistent)
+						.detail("PoppedRecently", tagEntry->poppedRecently)
+						.detail("Popped", tagEntry->popped)
+						.detail("UnpoppedRecovered", tagEntry->unpoppedRecovered);
+				}
+			}
 			if(logData->unpoppedRecoveredTags == 0 && logData->durableKnownCommittedVersion >= logData->recoveredAt && logData->recoveryComplete.canBeSet()) {
 				logData->recoveryComplete.send(Void());
 			}
@@ -1586,6 +1604,7 @@ ACTOR Future<Void> tLogCommit(
 		}
 
 		// Notifies the commitQueue actor to commit persistentQueue, and also unblocks tLogPeekMessages actors
+		TraceEvent("TLogCommit", logData->logId).detail("Version", req.version);
 		logData->version.set( req.version );
 		wait(waitForAll(playIgnoredPops));
 

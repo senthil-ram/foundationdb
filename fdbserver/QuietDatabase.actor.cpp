@@ -258,7 +258,7 @@ ACTOR Future<vector<WorkerInterface>> getStorageWorkers( Database cx, Reference<
 		TraceEvent(SevDebug, "DcIdInfo")
 			.detail("ServerLocalityID", server.locality.dcId())
 			.detail("MasterDcID", masterDcId);
-		if (!localOnly || (usableRegions == 1 || server.locality.dcId() == masterDcId)) {
+		if (true || !localOnly || (usableRegions == 1 || server.locality.dcId() == masterDcId)) {
 			auto itr = workersMap.find(server.address());
 			if(itr == workersMap.end()) {
 				TraceEvent(SevWarn, "GetStorageWorkers").detail("Reason", "Could not find worker for storage server").detail("SS", server.id());

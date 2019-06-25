@@ -1174,6 +1174,13 @@ ACTOR Future<Void> trackTlogRecovery( Reference<MasterData> self, Reference<Asyn
 			remoteRecovered.send(Void());
 		}
 
+		TraceEvent("TrackTLogRecovery")
+			.detail("OldTLogDataSize", newState.oldTLogData.size())
+			.detail("AllLogs", allLogs);
+		for (const auto & elem : newState.oldTLogData) {
+			TraceEvent("OldTLogData")
+				.detail("EpochEnd", elem.epochEnd);
+		}
 		if( finalUpdate ) {
 			oldLogSystems->get()->stopRejoins();
 			rejoinRequests = rejoinRequestHandler(self);
