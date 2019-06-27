@@ -1382,10 +1382,12 @@ ACTOR Future<Optional<Value>> getValue( Future<Version> version, Key key, Databa
 
 				g_traceBatch.addAttach("GetValueAttachID", info.debugID.get().first(), getValueID.get().first());
 				g_traceBatch.addEvent("GetValueDebug", getValueID.get().first(), "NativeAPI.getValue.Before"); //.detail("TaskID", g_network->getCurrentTask());
-				/*TraceEvent("TransactionDebugGetValueInfo", getValueID.get())
+				TraceEvent("TransactionDebugGetValueInfo")
 					.detail("Key", key)
 					.detail("ReqVersion", ver)
-					.detail("Servers", describe(ssi.second->get()));*/
+					.detail("KeyRangeBegin", ssi.first.begin)
+					.detail("KeyRangeEnd", ssi.first.end)
+					.detail("Servers", ssi.second->description());
 			}
 
 			++cx->getValueSubmitted;

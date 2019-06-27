@@ -81,18 +81,27 @@ static void applyMetadataMutations(UID const& dbgid, Arena &arena, VectorRef<Mut
 						info.src_info.reserve(src.size());
 						info.dest_info.reserve(dest.size());
 
+						std::string srcUidStr;
 						for (const auto& id : src) {
+							srcUidStr += id.toString();
 							auto storageInfo = getStorageInfo(id, storageCache, txnStateStore);
 							ASSERT(storageInfo->tag != invalidTag);
 							info.tags.push_back( storageInfo->tag );
 							info.src_info.push_back( storageInfo );
+
 						}
+						std::string dstUidStr;
 						for (const auto& id : dest) {
+							dstUidStr += id.toString();
 							auto storageInfo = getStorageInfo(id, storageCache, txnStateStore);
 							ASSERT(storageInfo->tag != invalidTag);
 							info.tags.push_back( storageInfo->tag );
 							info.dest_info.push_back( storageInfo );
 						}
+						TraceEvent("KeyServerApplyMutation")
+							.detail("Key", m.param1)
+							.detail("SrcUid", srcUidStr)
+							.detail("DstUid", dstUidStr);
 						uniquify(info.tags);
 						keyInfo->insert(insertRange,info);
 					}

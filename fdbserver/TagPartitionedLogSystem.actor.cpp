@@ -1197,6 +1197,13 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 					.detail("EndVersion", results[ new_safe_range_begin ].end).detail("SafeBegin", safe_range_begin).detail("SafeEnd", safe_range_end)
 					.detail("NewSafeBegin", new_safe_range_begin).detail("KnownCommittedVersion", knownCommittedVersion).detail("EpochEnd", lockInfo.epochEnd);
 
+				if (knownCommittedVersion > results[ new_safe_range_begin ].end) {
+					knownCommittedVersion = results[new_safe_range_begin].end;
+				}
+				TraceEvent("GetDurableResultFixed", dbgid).detail("Required", requiredCount).detail("Present", results.size()).detail("ServerState", sServerState)
+					.detail("RecoveryVersion", ((safe_range_end > 0) && (safe_range_end-1 < results.size())) ? results[ safe_range_end-1 ].end : -1)
+					.detail("EndVersion", results[ new_safe_range_begin ].end).detail("SafeBegin", safe_range_begin).detail("SafeEnd", safe_range_end)
+					.detail("NewSafeBegin", new_safe_range_begin).detail("KnownCommittedVersion", knownCommittedVersion).detail("EpochEnd", lockInfo.epochEnd);
 				return std::make_pair(knownCommittedVersion, results[ new_safe_range_begin ].end);
 			}
 		}
@@ -1485,6 +1492,9 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 				} else {
 					logSystem->knownCommittedVersion = knownCommittedVersion;
 				}
+				TraceEvent("RecoveryInfoFixed")
+					.detail("KCV", knownCommittedVersion)
+					.detail("MinEnd", minEnd);
 				logSystem->remoteLogsWrittenToCoreState = true;
 				logSystem->stopped = true;
 				logSystem->pseudoLocalities = prevState.pseudoLocalities;

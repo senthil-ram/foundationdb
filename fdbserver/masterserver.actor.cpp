@@ -701,8 +701,28 @@ ACTOR Future<Void> readTransactionSystemState( Reference<MasterData> self, Refer
 	uniquify(self->allTags);
 
 	auto kvs = self->txnStateStore->readRange( systemKeys );
-	for( auto & kv : kvs.get() )
+	for( auto & kv : kvs.get() ) {
 		TraceEvent("MasterRecoveredTXS", self->dbgid).detail("K", kv.key).detail("V", printable(kv.value));
+		if( kv.key.startsWith(keyServersPrefix) ) {
+			KeyRef k = kv.key.removePrefix(keyServersPrefix);
+			std::string srcUidStr;
+			std::string dstUidStr;
+			if (k != allKeys.end) {
+				vector<UID> src, dest;
+				decodeKeyServersValue(kv.value, src, dest);
+				for (const auto& id : src) {
+					srcUidStr += id.toString();
+				}
+				for (const auto& id : dest) {
+					dstUidStr += id.toString();
+				}
+				TraceEvent("MasterRecoveredTXSKeyServerApplyMutation")
+					.detail("Key", kv.key)
+					.detail("SrcUid", srcUidStr)
+					.detail("DstUid", dstUidStr);
+			}
+		}
+	}
 
 	self->txnStateLogAdapter->setNextVersion( oldLogSystem->getEnd() );  //< FIXME: (1) the log adapter should do this automatically after recovery; (2) if we make KeyValueStoreMemory guarantee immediate reads, we should be able to get rid of the discardCommit() below and not need a writable log adapter
 

@@ -53,9 +53,12 @@ public:
 	// It does, however, peek the specified tag directly at recovery time.
 
 	LogSystemDiskQueueAdapter( Reference<ILogSystem> logSystem, Tag tag, Reference<AsyncVar<PeekSpecialInfo>> peekLocality, bool recover=true ) : logSystem(logSystem), tag(tag), peekLocality(peekLocality), enableRecovery(recover), recoveryLoc(1), recoveryQueueLoc(1), poppedUpTo(0), nextCommit(1), recoveryQueueDataSize(0), peekTypeSwitches(0) {
+		TraceEvent("OutSideLSDQA");
 		if (enableRecovery) {
 			localityChanged = peekLocality ? peekLocality->onChange() : Never();
 			cursor = logSystem->peekSpecial( UID(), 1, tag, peekLocality ? peekLocality->get().primaryLocality : tagLocalityInvalid, peekLocality ? peekLocality->get().knownCommittedVersion : invalidVersion );
+			TraceEvent("EnableRecoveryLSDQAKCV")
+				.detail("KCV", peekLocality ? peekLocality->get().knownCommittedVersion : invalidVersion );
 		}
 	}
 

@@ -169,5 +169,6 @@ Future<LogSystemDiskQueueAdapter::CommitMessage> LogSystemDiskQueueAdapter::getC
 }
 
 LogSystemDiskQueueAdapter* openDiskQueueAdapter( Reference<ILogSystem> logSystem, Tag tag, Reference<AsyncVar<PeekSpecialInfo>> peekLocality ) {
+	TraceEvent("OpenDiskQueueAdapter");
 	return new LogSystemDiskQueueAdapter( logSystem, tag, peekLocality );
 }

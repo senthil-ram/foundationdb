@@ -562,7 +562,7 @@ public:
 	void addShard( ShardInfo* newShard ) {
 		ASSERT( !newShard->keys.empty() );
 		newShard->changeCounter = ++shardChangeCounter;
-		//TraceEvent("AddShard", this->thisServerID).detail("KeyBegin", newShard->keys.begin).detail("KeyEnd", newShard->keys.end).detail("State", newShard->isReadable() ? "Readable" : newShard->notAssigned() ? "NotAssigned" : "Adding").detail("Version", this->version.get());
+		TraceEvent("AddShard", this->thisServerID).detail("KeyBegin", newShard->keys.begin).detail("KeyEnd", newShard->keys.end).detail("State", newShard->isReadable() ? "Readable" : newShard->notAssigned() ? "NotAssigned" : "Adding").detail("Version", this->version.get());
 		/*auto affected = shards.getAffectedRangesAfterInsertion( newShard->keys, Reference<ShardInfo>() );
 		for(auto i = affected.begin(); i != affected.end(); ++i)
 			shards.insert( *i, Reference<ShardInfo>() );*/
@@ -586,9 +586,13 @@ public:
 
 	bool isReadable( KeyRangeRef const& keys ) {
 		auto sh = shards.intersectingRanges(keys);
-		for(auto i = sh.begin(); i != sh.end(); ++i)
-			if (!i->value()->isReadable())
+		for(auto i = sh.begin(); i != sh.end(); ++i) {
+			if (!i->value()->isReadable()) {
+				TraceEvent("ShardError")
+					.detail("Info", i->value()->debugDescribeState());
 				return false;
+			}
+		}
 		return true;
 	}
 
@@ -843,7 +847,13 @@ ACTOR Future<Void> getValueQ( StorageServer* data, GetValueRequest req ) {
 		state uint64_t changeCounter = data->shardChangeCounter;
 
 		if (!data->shards[req.key]->isReadable()) {
-			//TraceEvent("WrongShardServer", data->thisServerID).detail("Key", req.key).detail("Version", version).detail("In", "getValueQ");
+			if( req.debugID.present() )
+			    TraceEvent("WrongShardServer", data->thisServerID)
+					.detail("Key", req.key)
+					.detail("Version", version)
+					.detail("In", "getValueQ")
+					.detail("ShardInfo", data->shards[req.key]->debugDescribeState())
+					.detail("AddingShard", data->shards[req.key]->adding->server->thisServerID);
 			throw wrong_shard_server();
 		}
 
@@ -2305,12 +2315,12 @@ const char* changeServerKeysContextName[] = { "Update", "Restore" };
 void changeServerKeys( StorageServer* data, const KeyRangeRef& keys, bool nowAssigned, Version version, ChangeServerKeysContext context ) {
 	ASSERT( !keys.empty() );
 
-	//TraceEvent("ChangeServerKeys", data->thisServerID)
-	//	.detail("KeyBegin", keys.begin)
-	//	.detail("KeyEnd", keys.end)
-	//	.detail("NowAssigned", nowAssigned)
-	//	.detail("Version", version)
-	//	.detail("Context", changeServerKeysContextName[(int)context]);
+	TraceEvent("ChangeServerKeys", data->thisServerID)
+		.detail("KeyBegin", keys.begin)
+		.detail("KeyEnd", keys.end)
+		.detail("NowAssigned", nowAssigned)
+		.detail("Version", version)
+		.detail("Context", changeServerKeysContextName[(int)context]);
 	validate(data);
 
 	debugKeyRange( nowAssigned ? "KeysAssigned" : "KeysUnassigned", version, keys );
@@ -2320,16 +2330,16 @@ void changeServerKeys( StorageServer* data, const KeyRangeRef& keys, bool nowAss
 	for( auto it = existingShards.begin(); it != existingShards.end(); ++it ) {
 		if( nowAssigned != it->value()->assigned() ) {
 			isDifferent = true;
-			/*TraceEvent("CSKRangeDifferent", data->thisServerID)
+			TraceEvent("CSKRangeDifferent", data->thisServerID)
 			  .detail("KeyBegin", it->range().begin)
-			  .detail("KeyEnd", it->range().end);*/
+			  .detail("KeyEnd", it->range().end);
 			break;
 		}
 	}
 	if( !isDifferent ) {
-		//TraceEvent("CSKShortCircuit", data->thisServerID)
-		//	.detail("KeyBegin", keys.begin)
-		//	.detail("KeyEnd", keys.end);
+		TraceEvent("CSKShortCircuit", data->thisServerID)
+			.detail("KeyBegin", keys.begin)
+			.detail("KeyEnd", keys.end);
 		return;
 	}
 
@@ -2365,13 +2375,13 @@ void changeServerKeys( StorageServer* data, const KeyRangeRef& keys, bool nowAss
 	for (auto r = vr.begin(); r != vr.end(); ++r) {
 		KeyRangeRef range = keys & r->range();
 		bool dataAvailable = r->value()==latestVersion || r->value() >= version;
-		/*TraceEvent("CSKRange", data->thisServerID)
+		TraceEvent("CSKRange", data->thisServerID)
 			.detail("KeyBegin", range.begin)
 			.detail("KeyEnd", range.end)
 			.detail("Available", dataAvailable)
 			.detail("NowAssigned", nowAssigned)
 			.detail("NewestAvailable", r->value())
-			.detail("ShardState0", data->shards[range.begin]->debugDescribeState());*/
+			.detail("ShardState0", data->shards[range.begin]->debugDescribeState());
 		if (!nowAssigned) {
 			if (dataAvailable) {
 				ASSERT( r->value() == latestVersion);  // Not that we care, but this used to be checked instead of dataAvailable
@@ -2519,6 +2529,11 @@ private:
 
 	void applyPrivateData( StorageServer* data, MutationRef const& m ) {
 		TraceEvent(SevDebug, "SSPrivateMutation", data->thisServerID).detail("Mutation", m.toString());
+		if (m.param1.startsWith(serverKeysPrefix)) {
+			TraceEvent(SevDebug, "SendingPrivateMutation").detail("Original", m.toString())
+				.detail("Server", serverKeysDecodeServer(m.param1))
+				.detail("TagKey", serverTagKeyFor( serverKeysDecodeServer(m.param1) ));
+		}
 
 		if (processedStartKey) {
 			// Because of the implementation of the krm* functions, we expect changes in pairs, [begin,end)
@@ -2985,7 +3000,7 @@ void setAvailableStatus( StorageServer* self, KeyRangeRef keys, bool available )
 	auto& mLV = self->addVersionToMutationLog( self->data().getLatestVersion() );
 
 	KeyRange availableKeys = KeyRangeRef( persistShardAvailableKeys.begin.toString() + keys.begin.toString(), persistShardAvailableKeys.begin.toString() + keys.end.toString() );
-	//TraceEvent("SetAvailableStatus", self->thisServerID).detail("Version", mLV.version).detail("RangeBegin", availableKeys.begin).detail("RangeEnd", availableKeys.end);
+	TraceEvent("SetAvailableStatus", self->thisServerID).detail("Version", mLV.version).detail("RangeBegin", availableKeys.begin).detail("RangeEnd", availableKeys.end);
 
 	self->addMutationToMutationLog( mLV, MutationRef( MutationRef::ClearRange, availableKeys.begin, availableKeys.end ) );
 	self->addMutationToMutationLog( mLV, MutationRef( MutationRef::SetValue, availableKeys.begin, available ? LiteralStringRef("1") : LiteralStringRef("0") ) );
@@ -3002,7 +3017,11 @@ void setAssignedStatus( StorageServer* self, KeyRangeRef keys, bool nowAssigned 
 	KeyRange assignedKeys = KeyRangeRef(
 		persistShardAssignedKeys.begin.toString() + keys.begin.toString(),
 		persistShardAssignedKeys.begin.toString() + keys.end.toString() );
-	//TraceEvent("SetAssignedStatus", self->thisServerID).detail("Version", mLV.version).detail("RangeBegin", assignedKeys.begin).detail("RangeEnd", assignedKeys.end);
+	TraceEvent("SetAssignedStatus", self->thisServerID)
+		.detail("Version", mLV.version)
+		.detail("RangeBegin", assignedKeys.begin)
+		.detail("RangeEnd", assignedKeys.end)
+		.detail("NowAssigned", nowAssigned);
 	self->addMutationToMutationLog( mLV, MutationRef( MutationRef::ClearRange, assignedKeys.begin, assignedKeys.end ) );
 	self->addMutationToMutationLog( mLV, MutationRef( MutationRef::SetValue, assignedKeys.begin,
 			nowAssigned ? LiteralStringRef("1") : LiteralStringRef("0") ) );
