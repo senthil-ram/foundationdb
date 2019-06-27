@@ -1570,22 +1570,10 @@ proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 		state Future<ErrorOr<Void>> ddSnapReq = brokenPromiseToNever(
 			commitData->db->get().distributor.get().distributorSnapReq.tryGetReply(DistributorSnapRequest(snapReq.snapPayload, snapReq.snapUID))
 			);
+		double snapTimeout = g_network->isSimulated() ? 10.0 : SERVER_KNOBS->SNAP_CREATE_MAX_TIMEOUT;
+		double maxTimeout = 7 * snapTimeout;
 		try {
-			double snapTimeout = g_network->isSimulated() ? 10.0 : SERVER_KNOBS->SNAP_CREATE_MAX_TIMEOUT;
-			state double maxTimeout = 7 * snapTimeout;
-			choose {
-				when (ErrorOr<Void> result = wait(ddSnapReq)) {
-					if (result.isError()) {
-						throw result.getError();
-					}
-				}
-				when (wait(delay(maxTimeout))) {
-					throw timed_out();
-				}
-			}
-			if (ddSnapReq.isError()) {
-				throw operation_failed();
-			}
+			wait(timeoutError(ddSnapReq, maxTimeout));
 		} catch (Error& e) {
 			TraceEvent("SnapMasterProxy.DDSnapResponseError")
 				.detail("SnapPayload", snapReq.snapPayload)
