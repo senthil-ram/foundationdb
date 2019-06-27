@@ -1339,7 +1339,9 @@ KeyRange getShardKeyRange( StorageServer* data, const KeySelectorRef& sel )
 // Returns largest range such that the shard state isReadable and selectorInRange(sel, range) or wrong_shard_server if no such range exists
 {
 	auto i = sel.isBackward() ? data->shards.rangeContainingKeyBefore( sel.getKey() ) : data->shards.rangeContaining( sel.getKey() );
-	if (!i->value()->isReadable()) throw wrong_shard_server();
+	if (!i->value()->isReadable()) {
+		throw wrong_shard_server();
+	}
 	ASSERT( selectorInRange(sel, i->range()) );
 	return i->range();
 }
@@ -1443,6 +1445,11 @@ ACTOR Future<Void> getKeyValues( StorageServer* data, GetKeyValuesRequest req )
 			data->counters.rowsQueried += r.data.size();
 		}
 	} catch (Error& e) {
+		if( req.debugID.present() ) {
+			TraceEvent("GetRangeError")
+				.detail("DBGID", req.debugID.get())
+				.error(e);
+		}
 		if(!canReplyWith(e))
 			throw;
 		data->sendErrorWithPenalty(req.reply, e, data->getPenalty());
@@ -1855,6 +1862,12 @@ ACTOR Future<Standalone<RangeResultRef>> tryGetRange( Database cx, Version versi
 
 	try {
 		loop {
+			UID id(deterministicRandom()->randomUniqueID());
+			tr.debugTransaction( id );
+			TraceEvent("GetRangeFromStorage")
+				.detail("Begin", keys.begin)
+				.detail("End", keys.end)
+				.detail("DBGID", id);
 			Standalone<RangeResultRef> rep = wait( tr.getRange( begin, end, limits, true ) );
 			limits.decrement( rep );
 
