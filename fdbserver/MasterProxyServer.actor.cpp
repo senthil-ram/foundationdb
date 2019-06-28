@@ -1593,7 +1593,7 @@ proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 			snapReq.reply.sendError(e);
 		}
 	}
-	TraceEvent("SnapMasterProxy.SnapReqSuccess")
+	TraceEvent("SnapMasterProxy.SnapReqExit")
 		.detail("SnapPayload", snapReq.snapPayload)
 		.detail("SnapUID", snapReq.snapUID);
 	return Void();

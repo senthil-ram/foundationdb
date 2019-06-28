@@ -3425,7 +3425,7 @@ ACTOR Future<Void> snapCreateVersion1(Database inputCx, StringRef snapCmd, UID s
 
 	StringRef snapCmdArgs = snapCmd;
 	StringRef snapCmdPart = snapCmdArgs.eat(":");
-	state Standalone<StringRef> snapUIDRef(snapUID.toString());
+	Standalone<StringRef> snapUIDRef(snapUID.toString());
 	state Standalone<StringRef> snapPayloadRef = snapCmdPart
 		.withSuffix(LiteralStringRef(":uid="))
 		.withSuffix(snapUIDRef)
@@ -3520,7 +3520,7 @@ ACTOR Future<Void> snapshotDatabase(DatabaseContext* cx, StringRef snapPayload, 
 			g_traceBatch.addEvent("TransactionDebug", debugID.get().first(), "NativeAPI.snapshotDatabase.Before");
 		}
 
-		state ProxySnapRequest req(snapPayload, snapUID, debugID);
+		ProxySnapRequest req(snapPayload, snapUID, debugID);
 		wait(loadBalance(cx->getMasterProxies(false), &MasterProxyInterface::proxySnapReq, req, cx->taskID, true /*atmostOnce*/ ));
 		if (debugID.present())
 			g_traceBatch.addEvent("TransactionDebug", debugID.get().first(),
@@ -3556,8 +3556,7 @@ ACTOR Future<Void> snapCreateVersion2(Database inputCx, StringRef snapCmd, UID s
 
 	try {
 		Future<Void> exec = snapshotDatabase(cx, snapPayloadRef, snapUID, snapUID);
-		wait(timeoutError(exec, g_network->isSimulated() ? 80 : 600)); // dependent on SERVER_KNOBS->SNAP_CRATE_MAX_TIMEOUT
-																	   // FIXME: remove the timeoutError and hard-coded time limits
+		wait(exec);
 	} catch (Error& e) {
 		TraceEvent("SnapshotDatabaseErrorVersion2")
 			.detail("SnapCmd", snapCmd.toString())
