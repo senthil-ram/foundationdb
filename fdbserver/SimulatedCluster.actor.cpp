@@ -1414,7 +1414,7 @@ ACTOR void setupAndRun(std::string dataFolder, const char *testFile, bool reboot
 			wait( timeoutError( restartSimulatedSystem( &systemActors, dataFolder, &testerCount, &connFile, &startingConfiguration, tlsOptions, extraDB, whitelistBinPaths), 100.0 ) );
 			// FIXME: snapshot restore does not support multi-region restore, hence restore it as single region always
 			if (restoring) {
-				startingConfiguration = LiteralStringRef("usable_regions=1");
+				//startingConfiguration = LiteralStringRef("usable_regions=1");
 			}
 		}
 		else {
