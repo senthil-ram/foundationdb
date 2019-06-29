@@ -76,4 +76,6 @@ void setDataDurableVersion(UID uid, Version version);
 // print the version info all the storages servers on this node
 void printStorageVersionInfo();
 
+extern bool blockShardOwnershipXfer;
+
 #endif

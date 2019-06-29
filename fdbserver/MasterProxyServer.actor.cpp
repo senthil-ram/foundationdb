@@ -1522,8 +1522,10 @@ ACTOR Future<Void> monitorRemoteCommitted(ProxyCommitData* self) {
 ACTOR Future<Void>
 proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 {
+	blockShardOwnershipXfer = true;
 	TraceEvent("SnapMasterProxy.SnapReqEnter")
 		.detail("SnapPayload", snapReq.snapPayload)
+		.detail("BlockShardOwnershipXfer", blockShardOwnershipXfer)
 		.detail("SnapUID", snapReq.snapUID);
 	try {
 		// whitelist check
@@ -1593,8 +1595,11 @@ proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 			snapReq.reply.sendError(e);
 		}
 	}
+	ASSERT(blockShardOwnershipXfer == true);
+	blockShardOwnershipXfer = false;
 	TraceEvent("SnapMasterProxy.SnapReqExit")
 		.detail("SnapPayload", snapReq.snapPayload)
+		.detail("BlockShardOwnershipXfer", blockShardOwnershipXfer)
 		.detail("SnapUID", snapReq.snapUID);
 	return Void();
 }
