@@ -2169,6 +2169,16 @@ ACTOR Future<Void> fetchKeys( StorageServer *data, AddingShard* shard ) {
 		//FIXME: remove when we no longer support upgrades from 5.X
 		data->cx->enableLocalityLoadBalance = true;
 
+		state double delayTime = 0.0;
+		while (blockShardOwnershipXfer) {
+			wait(delay(0.1));
+			delayTime += 0.1;
+			if (delayTime == 1.0) {
+				TraceEvent(SevDebug, "DelayingFKUpdateBatch", data->thisServerID).detail("FKID", interval.pairID);
+				delayTime = 0.0;
+			}
+		}
+
 		// We have completed the fetch and write of the data, now we wait for MVCC window to pass.
 		//  As we have finished this work, we will allow more work to start...
 		shard->fetchComplete.send(Void());
@@ -2188,6 +2198,7 @@ ACTOR Future<Void> fetchKeys( StorageServer *data, AddingShard* shard ) {
 
 		FetchInjectionInfo* batch = wait( p.getFuture() );
 		TraceEvent(SevDebug, "FKUpdateBatch", data->thisServerID).detail("FKID", interval.pairID);
+
 
 		shard->phase = AddingShard::Waiting;
 

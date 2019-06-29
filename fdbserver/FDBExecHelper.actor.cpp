@@ -277,3 +277,5 @@ void printStorageVersionInfo() {
 			.detail("DurableVersion", itr->second.durableVersion);
 	}
 }
+
+bool blockShardOwnershipXfer = false;
