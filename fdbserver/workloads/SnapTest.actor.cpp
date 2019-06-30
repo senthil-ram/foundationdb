@@ -227,6 +227,10 @@ public: // workload functions
 			ASSERT(toDelay < self->maxSnapDelay);
 			wait(delay(toDelay));
 
+
+			state int oldMode = wait( setDDMode( cx, 0 ) );
+			wait(delay(20.0));
+
 			state int retry = 0;
 			state bool snapFailed = false;
 			loop {
@@ -253,6 +257,7 @@ public: // workload functions
 					}
 				}
 			}
+			wait(success( setDDMode( cx, oldMode ) ));
 			CSimpleIni ini;
 			ini.SetUnicode();
 			ini.LoadFile(self->restartInfoLocation.c_str());
