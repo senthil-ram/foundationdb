@@ -29,6 +29,7 @@
 #include "fdbclient/FailureMonitorClient.h"
 #include "fdbclient/KeyRangeMap.h"
 #include "fdbclient/Knobs.h"
+#include "fdbclient/ManagementAPI.actor.h"
 #include "fdbclient/MasterProxyInterface.h"
 #include "fdbclient/MonitorLeader.h"
 #include "fdbclient/MutationList.h"
@@ -3581,11 +3582,21 @@ ACTOR Future<Void> snapCreateVersion2(Database inputCx, StringRef snapCmd, UID s
 	return Void();
 }
 
-ACTOR Future<Void> snapCreate(Database inputCx, StringRef snapCmd, UID snapUID, int version) {
+ACTOR Future<Void> snapCreate(Database cx, StringRef snapCmd, UID snapUID, int version) {
 	if (version == 1) {
-		wait(snapCreateVersion1(inputCx, snapCmd, snapUID));
+		wait(snapCreateVersion1(cx, snapCmd, snapUID));
 		return Void();
 	}
-	wait(snapCreateVersion2(inputCx, snapCmd, snapUID));
+	state int oldMode = wait( setDDMode( cx, 0 ) );
+	// FIXME: Not sure if I need this
+	wait(delay(20.0));
+	try {
+		wait(snapCreateVersion2(cx, snapCmd, snapUID));
+	} catch (Error& e) {
+		state Error err = e;
+		wait(success( setDDMode( cx, oldMode ) ));
+		throw err;
+	}
+	wait(success( setDDMode( cx, oldMode ) ));
 	return Void();
 }
