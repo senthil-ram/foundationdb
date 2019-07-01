@@ -1482,6 +1482,9 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 				logSystem->lockResults = lockResults;
 				logSystem->recoverAt = minEnd;
 				logSystem->knownCommittedVersion = knownCommittedVersion;
+				TraceEvent("RecoveryInfoFixed")
+					.detail("KCV", knownCommittedVersion)
+					.detail("MinEnd", minEnd);
 				logSystem->remoteLogsWrittenToCoreState = true;
 				logSystem->stopped = true;
 				logSystem->pseudoLocalities = prevState.pseudoLocalities;
