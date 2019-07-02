@@ -1387,6 +1387,24 @@ ACTOR Future<Void> setHealthyZone( Database cx, StringRef zoneId, double seconds
 	}
 }
 
+ACTOR Future<int> getDDMode( Database cx) {
+	state Transaction tr(cx);
+	state int oldMode = -1;
+	loop {
+		try {
+			Optional<Value> old = wait( tr.get( dataDistributionModeKey ) );
+			if (old.present()) {
+				BinaryReader rd(old.get(), Unversioned());
+				rd >> oldMode;
+			}
+			return oldMode;
+		} catch (Error& e) {
+			TraceEvent("GetDDModeRetrying").error(e);
+			wait (tr.onError(e));
+		}
+	}
+}
+
 ACTOR Future<int> setDDMode( Database cx, int mode ) {
 	state Transaction tr(cx);
 	state int oldMode = -1;

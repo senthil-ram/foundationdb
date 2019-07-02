@@ -176,6 +176,7 @@ ACTOR Future<Void> checkDatabaseLock( Transaction*  tr, UID  id );
 ACTOR Future<Void> checkDatabaseLock( Reference<ReadYourWritesTransaction>  tr, UID  id );
 
 ACTOR Future<int> setDDMode( Database  cx, int  mode );
+ACTOR Future<int> getDDMode( Database  cx);
 
 ACTOR Future<Void> forceRecovery( Reference<ClusterConnectionFile> clusterFile, Standalone<StringRef> dcId );
 
