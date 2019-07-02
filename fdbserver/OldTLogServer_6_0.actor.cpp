@@ -1590,7 +1590,7 @@ ACTOR Future<Void> tLogCommit(
 			}
 		}
 
-		//TraceEvent("TLogCommit", logData->logId).detail("Version", req.version);
+		TraceEvent("TLogCommit", logData->logId).detail("Version", req.version);
 		commitMessages(self, logData, req.version, req.arena, req.messages);
 
 		logData->knownCommittedVersion = std::max(logData->knownCommittedVersion, req.knownCommittedVersion);

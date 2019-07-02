@@ -1604,6 +1604,8 @@ bool changeDurableVersion( StorageServer* data, Version desiredDurableVersion ) 
 	data->freeable.erase( data->freeable.begin(), data->freeable.lower_bound(nextDurableVersion) );
 
 	Future<Void> checkFatalError = data->otherError.getFuture();
+	TraceEvent("DbgDurableVersion")
+		.detail("Value", nextDurableVersion);
 	data->durableVersion.set( nextDurableVersion );
 	setDataDurableVersion(data->thisServerID, data->durableVersion.get());
 	if (checkFatalError.isReady()) checkFatalError.get();
