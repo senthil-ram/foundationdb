@@ -2143,6 +2143,8 @@ ACTOR Future<Void> fetchKeys( StorageServer *data, AddingShard* shard ) {
 		data->cx->enableLocalityLoadBalance = true;
 
 		state double delayTime = 0.0;
+		TraceEvent("BlockShardOwnershipXferB4")
+			.detail("Value", blockShardOwnershipXfer);
 		while (blockShardOwnershipXfer) {
 			wait(delay(0.1));
 			delayTime += 0.1;
@@ -2151,6 +2153,8 @@ ACTOR Future<Void> fetchKeys( StorageServer *data, AddingShard* shard ) {
 				delayTime = 0.0;
 			}
 		}
+		TraceEvent("BlockShardOwnershipXferAF")
+			.detail("Value", blockShardOwnershipXfer);
 
 		// We have completed the fetch and write of the data, now we wait for MVCC window to pass.
 		//  As we have finished this work, we will allow more work to start...
