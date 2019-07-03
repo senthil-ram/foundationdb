@@ -904,6 +904,25 @@ std::deque<std::pair<Version, LengthPrefixedStringRef>> & getVersionMessages( Re
 	return tagData->versionMessages;
 };
 
+void dbgPrintTagInfo(Reference<LogData> logData) {
+	for (const auto & localityList : logData->tag_data) {
+		if (localityList.size() == 0) {
+			continue;
+		}
+		for (const auto & tagDataEntry : localityList) {
+			if (!tagDataEntry.isValid()) {
+				continue;
+			}
+			TraceEvent(SevDebug, "TagDataDetailedInfo")
+				.detail("Tag", tagDataEntry->tag.toString())
+				.detail("NothingPersistent", tagDataEntry->nothingPersistent)
+				.detail("PoppedRecently", tagDataEntry->poppedRecently)
+				.detail("Popped", tagDataEntry->popped)
+				.detail("UnpoppedRecovered", tagDataEntry->unpoppedRecovered);
+		}
+	}
+}
+
 ACTOR Future<Void> tLogPopCore( TLogData* self, Tag inputTag, Version to, Reference<LogData> logData ) {
 	if (self->ignorePopRequest) {
 		TraceEvent("IgnoringPopRequest").detail("IgnorePopDeadline", self->ignorePopDeadline);
@@ -937,7 +956,9 @@ ACTOR Future<Void> tLogPopCore( TLogData* self, Tag inputTag, Version to, Refere
 			tagData->unpoppedRecovered = false;
 			logData->unpoppedRecoveredTags--;
 			TraceEvent("TLogPoppedTag", logData->logId).detail("Tags", logData->unpoppedRecoveredTags).detail("Tag", tag.toString()).detail("DurableKCVer", logData->durableKnownCommittedVersion).detail("RecoveredAt", logData->recoveredAt);
+			//dbgPrintTagInfo(logData);
 			if(logData->unpoppedRecoveredTags == 0 && logData->durableKnownCommittedVersion >= logData->recoveredAt && logData->recoveryComplete.canBeSet()) {
+				TraceEvent("TLogRecoveryComplete", logData->logId).detail("Tags", logData->unpoppedRecoveredTags).detail("DurableKCVer", logData->durableKnownCommittedVersion).detail("RecoveredAt", logData->recoveredAt);
 				logData->recoveryComplete.send(Void());
 			}
 		}
@@ -1220,6 +1241,7 @@ ACTOR Future<Void> doQueueCommit( TLogData* self, Reference<LogData> logData, st
 	logData->durableKnownCommittedVersion = knownCommittedVersion;
 	if(logData->unpoppedRecoveredTags == 0 && knownCommittedVersion >= logData->recoveredAt && logData->recoveryComplete.canBeSet()) {
 		TraceEvent("TLogRecoveryComplete", logData->logId).detail("Tags", logData->unpoppedRecoveredTags).detail("DurableKCVer", logData->durableKnownCommittedVersion).detail("RecoveredAt", logData->recoveredAt);
+		//dbgPrintTagInfo(logData);
 		logData->recoveryComplete.send(Void());
 	}
 
