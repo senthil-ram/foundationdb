@@ -3589,8 +3589,8 @@ ACTOR Future<Void> snapCreate(Database cx, StringRef snapCmd, UID snapUID, int v
 	TraceEvent("SettingDDModeFalse")
 		.detail("Mode", oldMode);
 	state int oldMode = wait( setDDMode( cx, 0 ) );
-	// FIXME: Not sure if I need this
-	wait(delay(20.0));
+	// FIXME: Not sure if I need this, set it and find more bugs
+	// wait(delay(20.0));
 	try {
 		wait(snapCreateVersion2(cx, snapCmd, snapUID));
 	} catch (Error& e) {
