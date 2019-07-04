@@ -1187,9 +1187,9 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 			int safe_range_end = logSet->tLogReplicationFactor - absent;
 
 			if( !lastEnd.present() || ((safe_range_end > 0) && (safe_range_end-1 < results.size()) && results[ safe_range_end-1 ].end < lastEnd.get()) ) {
-				Version knownCommittedVersion = 0;
+				Version knownCommittedVersion = INT64_MAX;
 				for(int i = 0; i < results.size(); i++) {
-					knownCommittedVersion = std::max(knownCommittedVersion, results[i].knownCommittedVersion);
+					knownCommittedVersion = std::min(knownCommittedVersion, results[i].knownCommittedVersion);
 				}
 
 				if (knownCommittedVersion > results[new_safe_range_begin].end) {
