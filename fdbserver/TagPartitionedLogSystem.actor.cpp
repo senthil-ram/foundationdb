@@ -1450,7 +1450,7 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 		}
 
 		state Optional<Version> lastEnd;
-		state Version knownCommittedVersion = 0;
+		state Version knownCommittedVersion = std::numeric_limits<Version>::max();
 		loop {
 			Version minEnd = std::numeric_limits<Version>::max();
 			Version maxEnd = 0;
@@ -1461,7 +1461,7 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 				}
 				auto versions = TagPartitionedLogSystem::getDurableVersion(dbgid, lockResults[log], logFailed[log], lastEnd);
 				if(versions.present()) {
-					knownCommittedVersion = std::max(knownCommittedVersion, versions.get().first);
+					knownCommittedVersion = std::min(knownCommittedVersion, versions.get().first);
 					maxEnd = std::max(maxEnd, versions.get().second);
 					minEnd = std::min(minEnd, versions.get().second);
 				}
