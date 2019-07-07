@@ -275,9 +275,6 @@ def run_simulation_test(basedir, options):
         pargs.append('-S')
         pargs.append('off')
     td = TestDirectory(basedir)
-    if options.buggify:
-        pargs.append('-b')
-        pargs.append('on')
     pargs.append('--trace_format')
     pargs.append(options.log_format)
     test_dir = td.get_current_test_dir()
@@ -300,6 +297,12 @@ def run_simulation_test(basedir, options):
             tmp[0] = options.old_binary
         if not first:
             tmp.append('-R')
+            pargs.append('-b')
+            pargs.append('off')
+        else:
+            if options.buggify:
+                pargs.append('-b')
+                pargs.append('on')
         first = False
         tmp.append('-f')
         tmp.append(testfile)
