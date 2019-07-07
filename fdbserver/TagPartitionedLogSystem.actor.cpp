@@ -1459,6 +1459,8 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 				if(!logServers[log]->isLocal) {
 					continue;
 				}
+				TraceEvent("LogID")
+					.detail("Value", log);
 				auto versions = TagPartitionedLogSystem::getDurableVersion(dbgid, lockResults[log], logFailed[log], lastEnd);
 				if(versions.present()) {
 					knownCommittedVersion = std::min(knownCommittedVersion, versions.get().first);

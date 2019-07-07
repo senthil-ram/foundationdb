@@ -1217,6 +1217,32 @@ ACTOR Future<Void> configurationMonitor( Reference<MasterData> self ) {
 	}
 }
 
+void printCoreTLogSet(const CoreTLogSet& item) {
+	TraceEvent("TLogInfo")
+		.detail("IsLocal", item.isLocal)
+		.detail("Locality", item.locality)
+		.detail("StartVersion", item.startVersion)
+		.detail("TLogVersion", item.tLogVersion);
+	for (const auto & elem : item.tLogs) {
+		TraceEvent("TLogUID")
+			.detail("Elem", elem);
+	}
+}
+
+void printDBState(const DBCoreState& dbCore) {
+	for (const auto & item : dbCore.tLogs) {
+		printCoreTLogSet(item);
+	}
+	for (const auto & item : dbCore.oldTLogData) {
+		TraceEvent("OldTLogData")
+			.detail("LogRouterTags", item.logRouterTags)
+			.detail("EpochEnd", item.epochEnd);
+		for (const auto & elem : item.tLogs) {
+			printCoreTLogSet(elem);
+		}
+	}
+}
+
 ACTOR Future<Void> masterCore( Reference<MasterData> self ) {
 	state TraceInterval recoveryInterval("MasterRecovery");
 	state double recoverStartTime = now();
@@ -1237,10 +1263,14 @@ ACTOR Future<Void> masterCore( Reference<MasterData> self ) {
 	TraceEvent("MasterRecoveryState", self->dbgid)
 		.detail("StatusCode", RecoveryStatus::locking_coordinated_state)
 		.detail("Status", RecoveryStatus::names[RecoveryStatus::locking_coordinated_state])
-		.detail("TLogs", self->cstate.prevDBState.tLogs.size())
+		.detail("TLogsSize", self->cstate.prevDBState.tLogs.size())
 		.detail("MyRecoveryCount", self->cstate.prevDBState.recoveryCount+2)
 		.detail("ForceRecovery", self->forceRecovery)
 		.trackLatest("MasterRecoveryState");
+
+	TraceEvent("MasterRecoveryDetailedInfoPrevDbState");
+	printDBState(self->cstate.prevDBState);
+	TraceEvent("MasterRecoveryDetailedInfoPrevDbStateComplete");
 
 	state Reference<AsyncVar<Reference<ILogSystem>>> oldLogSystems( new AsyncVar<Reference<ILogSystem>> );
 	state Future<Void> recoverAndEndEpoch = ILogSystem::recoverAndEndEpoch(oldLogSystems, self->dbgid, self->cstate.prevDBState, self->myInterface.tlogRejoin.getFuture(), self->myInterface.locality, &self->forceRecovery);
