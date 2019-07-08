@@ -1480,6 +1480,9 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 				logSystem->logSystemType = prevState.logSystemType;
 				logSystem->rejoins = rejoins;
 				logSystem->lockResults = lockResults;
+				if (knownCommittedVersion > minEnd) {
+					knownCommittedVersion =  minEnd;
+				}
 				logSystem->recoverAt = minEnd;
 				logSystem->knownCommittedVersion = knownCommittedVersion;
 				TraceEvent("RecoveryInfoFixed")
