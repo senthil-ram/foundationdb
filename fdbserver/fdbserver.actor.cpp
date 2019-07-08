@@ -1433,6 +1433,9 @@ int main(int argc, char* argv[]) {
 			publicAddresses.address = NetworkAddress(publicIP, ::getpid());
 		}
 
+		if (restarting) {
+			randomSeed += 1;
+		}
 		if (role==Simulation)
 			printf("Random seed is %u...\n", randomSeed);
 
