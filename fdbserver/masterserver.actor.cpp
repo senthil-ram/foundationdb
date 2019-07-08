@@ -1180,6 +1180,9 @@ ACTOR Future<Void> trackTlogRecovery( Reference<MasterData> self, Reference<Asyn
 			return Void();
 		}
 
+		TraceEvent("NewStateTLogSize")
+			.detail("AllLogs", allLogs)
+			.detail("ExpectedLogSets", self->configuration.expectedLogSets(self->primaryDcId.size() ? self->primaryDcId[0] : Optional<Key>()));
 		wait( changed );
 	}
 }

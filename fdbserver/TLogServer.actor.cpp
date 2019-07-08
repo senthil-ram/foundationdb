@@ -624,7 +624,13 @@ ACTOR Future<Void> tLogLock( TLogData* self, ReplyPromise< TLogLockResult > repl
 	result.end = stopVersion;
 	result.knownCommittedVersion = logData->knownCommittedVersion;
 
-	TraceEvent("TLogStop2", self->dbgid).detail("LogId", logData->logId).detail("Ver", stopVersion).detail("IsStopped", logData->stopped).detail("QueueCommitted", logData->queueCommittedVersion.get()).detail("KnownCommitted", result.knownCommittedVersion);
+	TraceEvent("TLogStop2", self->dbgid)
+		.detail("LogId", logData->logId)
+		.detail("Ver", stopVersion)
+		.detail("IsStopped", logData->stopped)
+		.detail("QueueCommitted", logData->queueCommittedVersion.get())
+		.detail("KnownCommitted", result.knownCommittedVersion)
+		.detail("Ptr", (int64_t) logData.getPtr());
 
 	reply.send( result );
 	return Void();
@@ -1966,7 +1972,16 @@ ACTOR Future<Void> tLogCommit(
 			}
         }
 
-		TraceEvent("TLogCommit", logData->logId).detail("Version", req.version);
+		TraceEvent("TLogCommit", logData->logId)
+			.detail("Version", req.version)
+			.detail("Stopped", logData->stopped)
+			.detail("Initialized", logData->initialized)
+			.detail("RecoveryCount", logData->recoveryCount)
+			.detail("LogDataVersion", logData->version.get())
+			.detail("QCVersion", logData->queueCommittedVersion.get())
+			.detail("KCV", logData->knownCommittedVersion)
+			.detail("PTR", (int64_t) logData.getPtr())
+			.detail("MinKCV", logData->minKnownCommittedVersion);
 		commitMessages(self, logData, req.version, req.arena, req.messages);
 
 		logData->knownCommittedVersion = std::max(logData->knownCommittedVersion, req.knownCommittedVersion);
@@ -2094,7 +2109,7 @@ ACTOR Future<Void> rejoinMasters( TLogData* self, TLogInterface tli, DBRecoveryC
 			if ( self->dbInfo->get().master.id() != lastMasterID) {
 				// The TLogRejoinRequest is needed to establish communications with a new master, which doesn't have our TLogInterface
 				TLogRejoinRequest req(tli);
-				TraceEvent("TLogRejoining", self->dbgid).detail("Master", self->dbInfo->get().master.id());
+				TraceEvent("TLogRejoining", self->dbgid).detail("Master", self->dbInfo->get().master.id()).detail("TLogMyID", tli.id());
 				choose {
 					when ( bool success = wait( brokenPromiseToNever( self->dbInfo->get().master.tlogRejoin.getReply( req ) ) ) ) {
 						if (success)
@@ -2811,6 +2826,8 @@ ACTOR Future<Void> updateLogSystem(TLogData* self, Reference<LogData> logData, L
 
 ACTOR Future<Void> tLogStart( TLogData* self, InitializeTLogRequest req, LocalityData locality ) {
 	state TLogInterface recruited(self->dbgid, locality);
+	TraceEvent("RecruitedID")
+		.detail("UniqueID", recruited.uniqueID);
 	recruited.initEndpoints();
 
 	DUMPTOKEN( recruited.peekMessages );

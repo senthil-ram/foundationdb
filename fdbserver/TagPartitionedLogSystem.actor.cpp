@@ -2019,6 +2019,10 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 				TLogRejoinRequest req = waitNext( rejoinRequests );
 				int pos = -1;
 				for( int i = 0; i < logServers.size(); i++ ) {
+					TraceEvent("TLogJoinedMEPre")
+						.detail("I", i)
+						.detail("LogServerID", logServers[i]->get().id())
+						.detail("MyinterfaceId", req.myInterface.id());
 					if( logServers[i]->get().id() == req.myInterface.id() ) {
 						pos = i;
 						break;
@@ -2026,8 +2030,14 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 				}
 				if ( pos != -1 ) {
 					TraceEvent("TLogJoinedMe", dbgid).detail("TLog", req.myInterface.id()).detail("Address", req.myInterface.commit.getEndpoint().getPrimaryAddress().toString());
-					if( !logServers[pos]->get().present() || req.myInterface.commit.getEndpoint() != logServers[pos]->get().interf().commit.getEndpoint())
+					TraceEvent("TLogJoinedMeDetails")
+						.detail("IsPresent", logServers[pos]->get().present())
+						.detail("MyInterfaceGetEndPoint", req.myInterface.commit.getEndpoint().getPrimaryAddress().toString())
+						.detail("LogServerAddress", logServers[pos]->get().present() ? logServers[pos]->get().interf().commit.getEndpoint().getPrimaryAddress().toString() : "Empty");
+					if( !logServers[pos]->get().present() || req.myInterface.commit.getEndpoint() != logServers[pos]->get().interf().commit.getEndpoint()) {
+						TraceEvent("TLogJoinedOverwrite");
 						logServers[pos]->setUnconditional( OptionalInterface<TLogInterface>(req.myInterface) );
+					}
 					lastReply[req.myInterface.id()].send(false);
 					lastReply[req.myInterface.id()] = req.reply;
 				}

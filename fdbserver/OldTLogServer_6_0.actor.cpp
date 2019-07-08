@@ -1590,7 +1590,15 @@ ACTOR Future<Void> tLogCommit(
 			}
 		}
 
-		TraceEvent("TLogCommit", logData->logId).detail("Version", req.version);
+		TraceEvent("TLogCommit", logData->logId)
+			.detail("Version", req.version)
+			.detail("Stopped", logData->stopped)
+			.detail("Initialized", logData->initialized)
+			.detail("RecoveryCount", logData->recoveryCount)
+			.detail("LogDataVersion", logData->version.get())
+			.detail("QCVersion", logData->queueCommittedVersion.get())
+			.detail("KCV", logData->knownCommittedVersion)
+			.detail("MinKCV", logData->minKnownCommittedVersion);
 		commitMessages(self, logData, req.version, req.arena, req.messages);
 
 		logData->knownCommittedVersion = std::max(logData->knownCommittedVersion, req.knownCommittedVersion);
@@ -1716,7 +1724,7 @@ ACTOR Future<Void> rejoinMasters( TLogData* self, TLogInterface tli, DBRecoveryC
 			if ( self->dbInfo->get().master.id() != lastMasterID) {
 				// The TLogRejoinRequest is needed to establish communications with a new master, which doesn't have our TLogInterface
 				TLogRejoinRequest req(tli);
-				TraceEvent("TLogRejoining", self->dbgid).detail("Master", self->dbInfo->get().master.id());
+				TraceEvent("TLogRejoining", self->dbgid).detail("Master", self->dbInfo->get().master.id()).detail("TLogMyID", tli.id());
 				choose {
 					when ( bool success = wait( brokenPromiseToNever( self->dbInfo->get().master.tlogRejoin.getReply( req ) ) ) ) {
 						if (success)
