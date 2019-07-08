@@ -1450,10 +1450,10 @@ struct TagPartitionedLogSystem : ILogSystem, ReferenceCounted<TagPartitionedLogS
 		}
 
 		state Optional<Version> lastEnd;
-		state Version knownCommittedVersion = std::numeric_limits<Version>::max();
 		loop {
 			Version minEnd = std::numeric_limits<Version>::max();
 			Version maxEnd = 0;
+			state Version knownCommittedVersion = std::numeric_limits<Version>::max();
 			std::vector<Future<Void>> changes;
 			for(int log = 0; log < logServers.size(); log++) {
 				if(!logServers[log]->isLocal) {
