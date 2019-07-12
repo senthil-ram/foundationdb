@@ -1798,6 +1798,9 @@ tLogSnapCreate(TLogSnapRequest snapReq, TLogData* self, Reference<LogData> logDa
 			.detail("QueueCommittedVersion", logData->queueCommittedVersion.get())
 			.detail("Version", logData->version.get());
 
+		if (err != 0) {
+			throw operation_failed();
+		}
 		snapReq.reply.send(Void());
 	} catch (Error& e) {
 		TraceEvent("TLogExecHelperError").error(e, true /*includeCancelled */);
