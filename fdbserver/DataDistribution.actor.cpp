@@ -3835,7 +3835,7 @@ static std::set<int> const& normalDataDistributorErrors() {
 }
 
 ACTOR Future<Void> ddSnapCreate(DistributorSnapRequest snapReq, Reference<AsyncVar<struct ServerDBInfo>> db ) {
-	state Database cx = openDBOnServer(db, TaskDefaultEndpoint, true, true);
+	state Database cx = openDBOnServer(db, TaskPriority::DefaultDelay, true, true);
 	state double snapTimeout = g_network->isSimulated() ? 15.0 : SERVER_KNOBS->SNAP_CREATE_MAX_TIMEOUT;
 	TraceEvent("SnapDataDistributor.SnapReqEnter")
 		.detail("SnapPayload", snapReq.snapPayload)
@@ -3932,7 +3932,7 @@ ACTOR Future<Void> ddSnapCreate(DistributorSnapRequest snapReq, Reference<AsyncV
 ACTOR Future<Void> dataDistributor(DataDistributorInterface di, Reference<AsyncVar<struct ServerDBInfo>> db ) {
 	state Reference<DataDistributorData> self( new DataDistributorData(db, di.id()) );
 	state Future<Void> collection = actorCollection( self->addActor.getFuture() );
-	state Database cx = openDBOnServer(db, TaskDefaultEndpoint, true, true);
+	state Database cx = openDBOnServer(db, TaskPriority::DefaultDelay, true, true);
 	state ActorCollection actors(false);
 
 	try {
