@@ -1547,6 +1547,7 @@ proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 				.detail("SnapUID", snapReq.snapUID);
 			throw cluster_not_fully_recovered();
 		}
+
 		auto result =
 			commitData->txnStateStore->readValue(LiteralStringRef("log_anti_quorum").withPrefix(configKeysPrefix)).get();
 		int logAntiQuorum = 0;
@@ -1586,6 +1587,8 @@ proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 			.error(e, true /*includeCancelled*/);
 		if (e.code() != error_code_operation_cancelled) {
 			snapReq.reply.sendError(e);
+		} else {
+			throw e;
 		}
 	}
 	TraceEvent("SnapMasterProxy.SnapReqExit")

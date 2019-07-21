@@ -678,6 +678,8 @@ ACTOR Future<Void> workerSnapCreate(WorkerSnapRequest snapReq, StringRef snapFol
 		TraceEvent("ExecHelperError").error(e, true /*includeCancelled*/);
 		if (e.code() != error_code_operation_cancelled) {
 			snapReq.reply.sendError(e);
+		} else {
+			throw e;
 		}
 	}
 	return Void();

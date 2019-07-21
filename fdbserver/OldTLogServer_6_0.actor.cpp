@@ -931,7 +931,7 @@ void dbgPrintTagInfo(Reference<LogData> logData) {
 
 ACTOR Future<Void> tLogPopCore( TLogData* self, Tag inputTag, Version to, Reference<LogData> logData ) {
 	if (self->ignorePopRequest) {
-		TraceEvent("IgnoringPopRequest").detail("IgnorePopDeadline", self->ignorePopDeadline);
+		TraceEvent(SevDebug, "IgnoringPopRequest").detail("IgnorePopDeadline", self->ignorePopDeadline);
 
 		if (self->toBePopped.find(inputTag) == self->toBePopped.end()
 			|| to > self->toBePopped[inputTag]) {
@@ -1803,7 +1803,7 @@ tLogSnapCreate(TLogSnapRequest snapReq, TLogData* self, Reference<LogData> logDa
 		snapReq.reply.sendError(operation_failed());
 		return Void();
 	}
-	state ExecCmdValueString snapArg(snapReq.snapPayload);
+	ExecCmdValueString snapArg(snapReq.snapPayload);
 	try {
 		Standalone<StringRef> role = LiteralStringRef("role=").withSuffix(snapReq.role);
 		int err = wait(execHelper(&snapArg, self->dataFolder, role.toString(), 2 /* version */));
@@ -1828,6 +1828,8 @@ tLogSnapCreate(TLogSnapRequest snapReq, TLogData* self, Reference<LogData> logDa
 		TraceEvent("TLogExecHelperError").error(e, true /*includeCancelled */);
 		if (e.code() != error_code_operation_cancelled) {
 			snapReq.reply.sendError(e);
+		} else {
+			throw e;
 		}
 	}
 	return Void();

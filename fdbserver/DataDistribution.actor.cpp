@@ -3920,6 +3920,7 @@ ACTOR Future<Void> ddSnapCreateCore(DistributorSnapRequest snapReq, Reference<As
 
 ACTOR Future<Void> ddSnapCreate(DistributorSnapRequest snapReq, Reference<AsyncVar<struct ServerDBInfo>> db ) {
 	state Future<Void> dbInfoChange = db->onChange();
+	double delayTime = g_network->isSimulated() ? 70.0 : SERVER_KNOBS->SNAP_CREATE_MAX_TIMEOUT;
 	try {
 		choose {
 			when (wait(dbInfoChange)) {
@@ -3934,7 +3935,7 @@ ACTOR Future<Void> ddSnapCreate(DistributorSnapRequest snapReq, Reference<AsyncV
 					.detail("SnapUID", snapReq.snapUID);
 				snapReq.reply.send(Void());
 			}
-			when (wait(delay(70.0))) {
+			when (wait(delay(delayTime))) {
 				TraceEvent("DDSnapCreateTimedOut")
 					.detail("SnapPayload", snapReq.snapPayload)
 					.detail("SnapUID", snapReq.snapUID);
@@ -3942,14 +3943,15 @@ ACTOR Future<Void> ddSnapCreate(DistributorSnapRequest snapReq, Reference<AsyncV
 			}
 		}
 	} catch (Error& e) {
-		if (e.code() != error_code_operation_cancelled) {
-			snapReq.reply.sendError(e);
-		}
 		TraceEvent("DDSnapCreateError")
 			.detail("SnapPayload", snapReq.snapPayload)
 			.detail("SnapUID", snapReq.snapUID)
 			.error(e, true /*includeCancelled */);
-		throw e;
+		if (e.code() != error_code_operation_cancelled) {
+			snapReq.reply.sendError(e);
+		} else {
+			throw e;
+		}
 	}
 	return Void();
 }
