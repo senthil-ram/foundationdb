@@ -1826,9 +1826,7 @@ tLogSnapCreate(TLogSnapRequest snapReq, TLogData* self, Reference<LogData> logDa
 		snapReq.reply.send(Void());
 	} catch (Error& e) {
 		TraceEvent("TLogExecHelperError").error(e, true /*includeCancelled */);
-		if (e.code() == error_code_operation_cancelled) {
-			snapReq.reply.sendError(broken_promise());
-		} else {
+		if (e.code() != error_code_operation_cancelled) {
 			snapReq.reply.sendError(e);
 		}
 	}
@@ -1934,7 +1932,6 @@ ACTOR Future<Void> serveTLogInterface( TLogData* self, TLogInterface tli, Refere
 				req.reply.sendError( tlog_stopped() );
 		}
 		when( TLogDisablePopRequest req = waitNext( tli.disablePopRequest.getFuture() ) ) {
-			self->ignorePopRequest = true;
 			if (self->ignorePopUid != "") {
 				TraceEvent(SevWarn, "TLogPopDisableonDisable")
 					.detail("IgnorePopUid", self->ignorePopUid)
@@ -1946,6 +1943,7 @@ ACTOR Future<Void> serveTLogInterface( TLogData* self, TLogInterface tli, Refere
 				req.reply.sendError(operation_failed());
 			} else {
 				//FIXME: As part of reverting snapshot V1, make ignorePopUid a UID instead of string
+				self->ignorePopRequest = true;
 				self->ignorePopUid = req.snapUID.toString();
 				self->ignorePopDeadline = g_network->now() + SERVER_KNOBS->TLOG_IGNORE_POP_AUTO_ENABLE_DELAY;
 				req.reply.send(Void());
