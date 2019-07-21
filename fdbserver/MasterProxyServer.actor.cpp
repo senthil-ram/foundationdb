@@ -1547,6 +1547,7 @@ proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 				.detail("SnapUID", snapReq.snapUID);
 			throw cluster_not_fully_recovered();
 		}
+
 		auto result =
 			commitData->txnStateStore->readValue(LiteralStringRef("log_anti_quorum").withPrefix(configKeysPrefix)).get();
 		int logAntiQuorum = 0;
@@ -1567,19 +1568,16 @@ proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 			TraceEvent(SevWarnAlways, "DataDistributorNotPresent");
 			throw operation_failed();
 		}
-		state Future<ErrorOr<Void>> ddSnapReq = brokenPromiseToNever(
-			commitData->db->get().distributor.get().distributorSnapReq.tryGetReply(DistributorSnapRequest(snapReq.snapPayload, snapReq.snapUID))
-			);
-		double snapTimeout = g_network->isSimulated() ? 10.0 : SERVER_KNOBS->SNAP_CREATE_MAX_TIMEOUT;
-		double maxTimeout = 7 * snapTimeout;
+		state Future<ErrorOr<Void>> ddSnapReq =
+			commitData->db->get().distributor.get().distributorSnapReq.tryGetReply(DistributorSnapRequest(snapReq.snapPayload, snapReq.snapUID));
 		try {
-			wait(timeoutError(ddSnapReq, maxTimeout));
+			wait(throwErrorOr(ddSnapReq));
 		} catch (Error& e) {
 			TraceEvent("SnapMasterProxy.DDSnapResponseError")
 				.detail("SnapPayload", snapReq.snapPayload)
 				.detail("SnapUID", snapReq.snapUID)
 				.error(e, true /*includeCancelled*/ );
-			throw;
+			throw e;
 		}
 		snapReq.reply.send(Void());
 	} catch (Error& e) {
@@ -1587,10 +1585,10 @@ proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 			.detail("SnapPayload", snapReq.snapPayload)
 			.detail("SnapUID", snapReq.snapUID)
 			.error(e, true /*includeCancelled*/);
-		if (e.code() == error_code_operation_cancelled) {
-			snapReq.reply.sendError(broken_promise());
-		} else {
+		if (e.code() != error_code_operation_cancelled) {
 			snapReq.reply.sendError(e);
+		} else {
+			throw e;
 		}
 	}
 	TraceEvent("SnapMasterProxy.SnapReqExit")
