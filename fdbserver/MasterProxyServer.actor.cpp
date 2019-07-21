@@ -1584,7 +1584,9 @@ proxySnapCreate(ProxySnapRequest snapReq, ProxyCommitData* commitData)
 			.detail("SnapPayload", snapReq.snapPayload)
 			.detail("SnapUID", snapReq.snapUID)
 			.error(e, true /*includeCancelled*/);
-		snapReq.reply.sendError(e);
+		if (e.code() != error_code_operation_cancelled) {
+			snapReq.reply.sendError(e);
+		}
 	}
 	TraceEvent("SnapMasterProxy.SnapReqExit")
 		.detail("SnapPayload", snapReq.snapPayload)
