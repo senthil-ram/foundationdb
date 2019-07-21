@@ -792,8 +792,6 @@ void SimulationConfig::generateNormalConfig(int minimumReplication, int minimumR
 	// This is needed to make sure the number of server (and machine) teams is no larger than the desired number.
 	bool generateMachineTeamTestConfig = BUGGIFY_WITH_PROB(0.1) ? true : false;
 	bool generateFearless = simple ? false : (minimumRegions > 1 || deterministicRandom()->random01() < 0.5);
-	// FIXME: temp code, make this a know to the test
-	generateFearless = false;
 	datacenters = simple ? 1 : ( generateFearless ? ( minimumReplication > 0 || deterministicRandom()->random01() < 0.5 ? 4 : 6 ) : deterministicRandom()->randomInt( 1, 4 ) );
 	if (deterministicRandom()->random01() < 0.25) db.desiredTLogCount = deterministicRandom()->randomInt(1,7);
 	if (deterministicRandom()->random01() < 0.25) db.masterProxyCount = deterministicRandom()->randomInt(1,7);
