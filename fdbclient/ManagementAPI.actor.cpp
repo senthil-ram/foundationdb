@@ -1475,13 +1475,13 @@ ACTOR Future<Void> waitForExcludedServers( Database cx, vector<AddressExclusion>
 	}
 }
 
-ACTOR Future<UID> mgmtSnapCreate(Database cx, StringRef snapCmd, int version) {
+ACTOR Future<UID> mgmtSnapCreate(Database cx, StringRef snapCmd) {
 	state int retryCount = 0;
 
 	loop {
 		state UID snapUID = deterministicRandom()->randomUniqueID();
 		try {
-			wait(snapCreate(cx, snapCmd, snapUID, version));
+			wait(snapCreate(cx, snapCmd, snapUID));
 			TraceEvent("SnapCreateSucceeded").detail("snapUID", snapUID);
 			return snapUID;
 		} catch (Error& e) {
