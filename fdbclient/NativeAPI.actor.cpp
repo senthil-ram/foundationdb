@@ -3524,11 +3524,14 @@ ACTOR Future<Void> snapshotDatabase(Reference<DatabaseContext> cx, StringRef sna
 			g_traceBatch.addEvent("TransactionDebug", debugID.get().first(), "NativeAPI.snapshotDatabase.Before");
 		}
 
-		ProxySnapRequest req(snapPayload, snapUID, debugID);
-		wait(loadBalance(cx->getMasterProxies(false), &MasterProxyInterface::proxySnapReq, req, cx->taskID, true /*atmostOnce*/ ));
-		if (debugID.present())
-			g_traceBatch.addEvent("TransactionDebug", debugID.get().first(),
-									"NativeAPI.SnapshotDatabase.After");
+		choose {
+			when(wait(cx->onMasterProxiesChanged())) { throw operation_failed(); }
+			when(wait(loadBalance(cx->getMasterProxies(false), &MasterProxyInterface::proxySnapReq, ProxySnapRequest(snapPayload, snapUID, debugID), cx->taskID, true /*atmostOnce*/ ))) {
+				if (debugID.present())
+					g_traceBatch.addEvent("TransactionDebug", debugID.get().first(),
+											"NativeAPI.SnapshotDatabase.After");
+			}
+		}
 	} catch (Error& e) {
 		TraceEvent("NativeAPI.SnapshotDatabaseError")
 			.detail("SnapPayload", snapPayload)
@@ -3585,14 +3588,10 @@ ACTOR Future<Void> snapCreateCore(Database cx, StringRef snapCmd, UID snapUID) {
 }
 
 ACTOR Future<Void> snapCreate(Database cx, StringRef snapCmd, UID snapUID) {
-	state int oldMode = wait( setDDMode( cx, 0 ) );
 	try {
 		wait(snapCreateCore(cx, snapCmd, snapUID));
 	} catch (Error& e) {
-		state Error err = e;
-		wait(success( setDDMode( cx, oldMode ) ));
-		throw err;
+		throw e;
 	}
-	wait(success( setDDMode( cx, oldMode ) ));
 	return Void();
 }
