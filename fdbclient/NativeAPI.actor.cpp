@@ -587,6 +587,7 @@ ACTOR static Future<Void> monitorClientInfo(Reference<AsyncVar<Optional<ClusterI
 				incorrectTime = Optional<double>();
 			}
 
+			TraceEvent("WaitingForAnyFailuresGoingToChoose");
 			choose {
 				when( ClientDBInfo ni = wait( clusterInterface->get().present() ? brokenPromiseToNever( clusterInterface->get().get().openDatabase.getReply( req ) ) : Never() ) ) {
 					outInfo->set(ni);
@@ -620,13 +621,16 @@ ACTOR static Future<Void> monitorClientInfo(Reference<AsyncVar<Optional<ClusterI
 						if (skipWaitForProxyFail) break;
 
 						leaderMon = Void();
+						TraceEvent("WaitingForAnyFailures");
 						state Future<Void> anyFailures = waitForAny(onProxyFailureVec);
 						choose {
 							when(wait(anyFailures || outInfo->onChange())) {}
 							when(wait(ccfChanged)) { break; }
 						}
+						TraceEvent("WaitingForAnyFailuresDone");
 						if(anyFailures.isReady()) {
 							leaderMon = ccf ? monitorLeader(ccf, clusterInterface) : Void();
+							TraceEvent("WaitingForAnyFailuresBreak");
 							break;
 						}
 					}
@@ -3526,7 +3530,7 @@ ACTOR Future<Void> snapshotDatabase(Reference<DatabaseContext> cx, StringRef sna
 
 		choose {
 			when(wait(cx->onMasterProxiesChanged())) { throw operation_failed(); }
-			when(wait(loadBalance(cx->getMasterProxies(false), &MasterProxyInterface::proxySnapReq, ProxySnapRequest(snapPayload, snapUID, debugID), cx->taskID, true /*atmostOnce*/ ))) {
+			when(wait(loadBalance(cx->getMasterProxies(true), &MasterProxyInterface::proxySnapReq, ProxySnapRequest(snapPayload, snapUID, debugID), cx->taskID, true /*atmostOnce*/ ))) {
 				if (debugID.present())
 					g_traceBatch.addEvent("TransactionDebug", debugID.get().first(),
 											"NativeAPI.SnapshotDatabase.After");
