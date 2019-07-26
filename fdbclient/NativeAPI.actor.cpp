@@ -3529,7 +3529,9 @@ ACTOR Future<Void> snapshotDatabase(Reference<DatabaseContext> cx, StringRef sna
 		}
 
 		choose {
-			when(wait(cx->onMasterProxiesChanged())) { throw operation_failed(); }
+			when(wait(cx->onMasterProxiesChanged())) {
+				throw operation_failed();
+			}
 			when(wait(loadBalance(cx->getMasterProxies(true), &MasterProxyInterface::proxySnapReq, ProxySnapRequest(snapPayload, snapUID, debugID), cx->taskID, true /*atmostOnce*/ ))) {
 				if (debugID.present())
 					g_traceBatch.addEvent("TransactionDebug", debugID.get().first(),

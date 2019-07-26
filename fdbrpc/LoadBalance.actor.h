@@ -189,7 +189,10 @@ Future< REPLY_TYPE(Request) > loadBalance(
 	state Future<Void> secondDelay = Never();
 
 	state Promise<Void> requestFinished;
-	
+
+	if (atMostOnce) {
+		TraceEvent("InsideLoadBalance");
+	}
 	setReplyPriority(request, taskID);
 	if (!alternatives)
 		return Never();
@@ -274,6 +277,7 @@ Future< REPLY_TYPE(Request) > loadBalance(
 	state bool triedAllOptions = false;
 	loop {
 		// Find an alternative, if any, that is not failed, starting with nextAlt
+		TraceEvent("InsideLoadBalanceLoop");
 		state RequestStream<Request> const* stream = NULL;
 		for(int alternativeNum=0; alternativeNum<alternatives->size(); alternativeNum++) {
 			int useAlt = nextAlt;
@@ -293,6 +297,7 @@ Future< REPLY_TYPE(Request) > loadBalance(
 		if(!stream && !firstRequest.isValid() ) {
 			// Everything is down!  Wait for someone to be up.
 
+			TraceEvent("InsideLoadBalanceLoop1");
 			vector<Future<Void>> ok( alternatives->size() );
 			for(int i=0; i<ok.size(); i++) {
 				ok[i] = IFailureMonitor::failureMonitor().onStateEqual( alternatives->get(i, channel).getEndpoint(), FailureStatus(false) );
@@ -315,6 +320,7 @@ Future< REPLY_TYPE(Request) > loadBalance(
 
 				g_network->networkMetrics.newestAlternativesFailure = now();
 
+				TraceEvent("InsideLoadBalanceLoop2");
 				choose {
 					when ( wait( quorum( ok, 1 ) ) ) {}
 					when ( wait( ::delayJittered( delay ) ) ) {
@@ -322,17 +328,20 @@ Future< REPLY_TYPE(Request) > loadBalance(
 					}
 				}
 			} else {
+				TraceEvent("InsideLoadBalanceLoop3");
 				wait( quorum( ok, 1 ) );
 			}
 
 			numAttempts = 0; // now that we've got a server back, reset the backoff
 		} else if(!stream) {
+			TraceEvent("InsideLoadBalanceLoop4");
 			//Only the first location is available. 
 			Optional<REPLY_TYPE(Request)> result = wait( firstRequest );
 			if(result.present()) {
 				return result.get();
 			}
 
+			TraceEvent("InsideLoadBalanceLoop4");
 			firstRequest = Future<Optional<REPLY_TYPE(Request)>>();
 			firstRequestEndpoint = Optional<uint64_t>();
 		} else if( firstRequest.isValid() ) {
@@ -340,6 +349,7 @@ Future< REPLY_TYPE(Request) > loadBalance(
 			secondRequest = makeRequest(stream, request, backoff, requestFinished.getFuture(), model, false, atMostOnce, triedAllOptions);
 			state bool firstFinished = false;
 
+			TraceEvent("InsideLoadBalanceLoop5");
 			loop {
 				choose {
 					when(ErrorOr<Optional<REPLY_TYPE(Request)>> result = wait( firstRequest.isValid() ? errorOr(firstRequest) : Never() )) {
@@ -383,6 +393,7 @@ Future< REPLY_TYPE(Request) > loadBalance(
 			firstRequest = makeRequest(stream, request, backoff, requestFinished.getFuture(), model, true, atMostOnce, triedAllOptions);
 			firstRequestEndpoint = stream->getEndpoint().token.first();
 
+			TraceEvent("InsideLoadBalanceLoop6");
 			loop {
 				choose {
 					when(ErrorOr<Optional<REPLY_TYPE(Request)>> result = wait( errorOr(firstRequest) )) {
