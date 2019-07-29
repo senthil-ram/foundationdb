@@ -211,7 +211,8 @@ public: // workload functions
 					wait(status);
 					break;
 				} catch (Error& e) {
-					if (e.code() == error_code_txn_exec_log_anti_quorum) {
+					if ((e.code() == error_code_txn_exec_log_anti_quorum)
+						|| (e.code() == error_code_timed_out)) {
 						snapFailed = true;
 						break;
 					}

@@ -3531,6 +3531,9 @@ ACTOR Future<Void> snapshotDatabase(Reference<DatabaseContext> cx, StringRef sna
 					g_traceBatch.addEvent("TransactionDebug", debugID.get().first(),
 											"NativeAPI.SnapshotDatabase.After");
 			}
+			when(wait(delay(1000.0))) {
+				throw timed_out();
+			}
 		}
 	} catch (Error& e) {
 		TraceEvent("NativeAPI.SnapshotDatabaseError")
