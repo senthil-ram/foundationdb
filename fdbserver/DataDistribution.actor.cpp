@@ -4215,6 +4215,22 @@ ACTOR Future<Void> ddSnapCreateCore(DistributorSnapRequest snapReq, Reference<As
 			.detail("SnapPayload", snapReq.snapPayload)
 			.detail("SnapUID", snapReq.snapUID)
 			.error(e, true /*includeCancelled */);
+
+		if (e.code() == snap_storage_failed() || e.code() == snap_tlog_failed()) {
+			// enable tlog pop on local tlog nodes
+			std::vector<TLogInterface> tlogs = db->get().logSystemConfig.allLocalLogs(false);
+			try {
+				std::vector<Future<Void>> enablePops;
+				for (const auto & tlog : tlogs) {
+					enablePops.push_back(
+						transformErrors(throwErrorOr(tlog.enablePopRequest.tryGetReply(TLogEnablePopRequest(snapReq.snapUID))), snap_enable_tlog_pop_failed())
+						);
+				}
+				wait(waitForAll(enablePops));
+			} catch (Error& error) {
+				TraceEvent(SevDebug, "IgnoreEnableTLogPopFailure");
+			}
+		}
 		throw e;
 	}
 	return Void();
